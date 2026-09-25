@@ -1,7 +1,7 @@
 services:
   app:
     build: ./docker/php
-    container_name: booking-app
+    container_name: ${CONTAINER_PREFIX:-booking}-app
     restart: unless-stopped
     volumes:
       - ./src:/var/www/html
@@ -13,10 +13,10 @@ services:
 
   webserver:
     image: nginx:alpine
-    container_name: booking-web
+    container_name: ${CONTAINER_PREFIX:-booking}-web
     restart: unless-stopped
     ports:
-      - '8090:80'
+      - '${WEB_PORT:-8090}:80'
     volumes:
       - ./src:/var/www/html:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
@@ -28,7 +28,7 @@ services:
 
   mysql:
     image: mysql:8.0
-    container_name: booking-mysql
+    container_name: ${CONTAINER_PREFIX:-booking}-mysql
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${DB_DATABASE}
@@ -37,28 +37,34 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - booking-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     networks:
       - booking-net
 
   redis:
     image: redis:7-alpine
-    container_name: booking-redis
+    container_name: ${CONTAINER_PREFIX:-booking}-redis
     restart: unless-stopped
     networks:
       - booking-net
 
   mailpit:
     image: axllent/mailpit
-    container_name: booking-mailpit
+    container_name: ${CONTAINER_PREFIX:-booking}-mailpit
     restart: unless-stopped
     ports:
-      - "8025:8025"
+      - '${MAILPIT_PORT:-8025}:8025'
     networks:
       - booking-net
       - nginx-net
   queue:
     build: ./docker/php
-    container_name: booking-queue
+    container_name: ${CONTAINER_PREFIX:-booking}-queue
     restart: unless-stopped
     command: php artisan queue:work --tries=3 --sleep=3
     volumes:
@@ -71,7 +77,7 @@ services:
 
   scheduler:
     build: ./docker/php
-    container_name: booking-scheduler
+    container_name: ${CONTAINER_PREFIX:-booking}-scheduler
     restart: unless-stopped
     command: php artisan schedule:work
     volumes:
