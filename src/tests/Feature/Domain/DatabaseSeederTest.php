@@ -23,7 +23,7 @@ class DatabaseSeederTest extends TestCase
         $this->assertSame(3, Tenant::count());
         $this->assertSame(1, User::where('role', UserRole::SuperAdmin)->count());
 
-        Tenant::with(['users', 'services', 'businessHours', 'appointments'])->get()
+        Tenant::with(['users', 'services.staffMembers', 'staffMembers', 'businessHours', 'appointments'])->get()
             ->each(function (Tenant $tenant): void {
                 $this->assertSame(
                     [UserRole::TenantAdmin],
@@ -32,6 +32,11 @@ class DatabaseSeederTest extends TestCase
                 $this->assertCount(3, $tenant->services);
                 $this->assertCount(6, $tenant->businessHours);
                 $this->assertCount(2, $tenant->appointments);
+                $this->assertCount(3, $tenant->staffMembers);
+                $this->assertTrue($tenant->services->every(
+                    fn ($service): bool => $service->staffMembers->isNotEmpty()
+                        && $service->staffMembers->every(fn ($staff): bool => $staff->tenant_id === $tenant->id),
+                ));
             });
     }
 
@@ -46,10 +51,11 @@ class DatabaseSeederTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
 
-        Appointment::with(['user', 'service', 'tenant.businessHours'])->get()
+        Appointment::with(['user', 'service', 'staffMember.services', 'tenant.businessHours'])->get()
             ->each(function (Appointment $appointment): void {
                 $this->assertSame(UserRole::Customer, $appointment->user->role);
                 $this->assertSame($appointment->tenant_id, $appointment->service->tenant_id);
+                $this->assertTrue($appointment->staffMember->services->contains($appointment->service));
                 $this->assertNotNull(
                     $appointment->tenant->hoursFor($appointment->start_time),
                     'Seeded appointment falls on a closed day.',

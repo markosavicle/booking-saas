@@ -12,43 +12,31 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Service extends Model
+class StaffMember extends Model
 {
     use BelongsToTenant, HasFactory;
 
     protected $fillable = [
         'tenant_id',
         'name',
-        'duration_minutes',
-        'price',
         'is_active',
     ];
 
     protected function casts(): array
     {
         return [
-            'duration_minutes' => 'integer',
-            'price' => 'decimal:2',
             'is_active' => 'boolean',
         ];
+    }
+
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(Service::class);
     }
 
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
-    }
-
-    public function staffMembers(): BelongsToMany
-    {
-        return $this->belongsToMany(StaffMember::class);
-    }
-
-    /**
-     * Active staff members qualified to perform this service.
-     */
-    public function qualifiedStaff(): BelongsToMany
-    {
-        return $this->staffMembers()->active();
     }
 
     #[Scope]

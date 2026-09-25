@@ -55,6 +55,11 @@ class Tenant extends Model
         return $this->hasMany(User::class);
     }
 
+    public function staffMembers(): HasMany
+    {
+        return $this->hasMany(StaffMember::class);
+    }
+
     public function businessHours(): HasMany
     {
         return $this->hasMany(BusinessHour::class);
