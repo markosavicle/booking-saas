@@ -1,0 +1,16 @@
+name: Deploy Booking SaaS
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy Application
+        run: |
+          cd /home/markoserver/docker/booking-saas
+          git fetch origin main
+          git reset --hard origin/main
+          docker compose up -d --build
+          docker exec booking-app php artisan migrate --force
+          docker exec booking-app php artisan config:cache

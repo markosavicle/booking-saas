@@ -1,0 +1,18 @@
+name: Laravel CI
+on:
+  pull_request:
+    branches: [ main ]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite3, pdo_sqlite
+      - name: Install Composer Dependencies
+        run: cd src && composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+      - name: Run PHPUnit Tests
+        run: cd src && php artisan test --env=testing
