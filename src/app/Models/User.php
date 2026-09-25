@@ -1,10 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use App\Enums\UserRole;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -13,10 +18,14 @@ class User extends Authenticatable implements FilamentUser
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    /**
+     * `role` and `tenant_id` are deliberately NOT mass-assignable to prevent
+     * privilege escalation via request payloads. Assign them explicitly.
+     */
     protected $fillable = [
-        'tenant_id',
         'name',
         'email',
+        'phone',
         'password',
     ];
 
@@ -30,12 +39,33 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'role' => UserRole::class,
         ];
+    }
+
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
+    }
+
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === UserRole::SuperAdmin;
+    }
+
+    public function isTenantAdmin(): bool
+    {
+        return $this->role === UserRole::TenantAdmin;
     }
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return true; // Allows all users for now
+        return $this->isSuperAdmin() || $this->isTenantAdmin();
     }
 
     public function getFilamentName(): string

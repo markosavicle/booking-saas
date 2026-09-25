@@ -1,15 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use App\Enums\AppointmentStatus;
 use App\Models\Traits\BelongsToTenant;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Appointment extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant, HasFactory;
 
     protected $fillable = [
         'tenant_id',
@@ -20,11 +26,14 @@ class Appointment extends Model
         'status',
     ];
 
-    // Ensure dates are cast properly for Carbon formatting
-    protected $casts = [
-        'start_time' => 'datetime',
-        'end_time' => 'datetime',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'start_time' => 'datetime',
+            'end_time' => 'datetime',
+            'status' => AppointmentStatus::class,
+        ];
+    }
 
     public function user(): BelongsTo
     {
@@ -36,8 +45,23 @@ class Appointment extends Model
         return $this->belongsTo(Service::class);
     }
 
-    public function tenant(): BelongsTo
+    /**
+     * Appointments that occupy a calendar slot (i.e. not canceled).
+     */
+    #[Scope]
+    protected function blocking(Builder $query): void
     {
-        return $this->belongsTo(Tenant::class);
+        $query->whereIn($this->qualifyColumn('status'), AppointmentStatus::blocking());
+    }
+
+    /**
+     * Half-open interval overlap: [start, end) intersects [start_time, end_time).
+     * Back-to-back appointments (one ends exactly when the next starts) do not overlap.
+     */
+    #[Scope]
+    protected function overlapping(Builder $query, CarbonInterface $start, CarbonInterface $end): void
+    {
+        $query->where($this->qualifyColumn('start_time'), '<', $end)
+            ->where($this->qualifyColumn('end_time'), '>', $start);
     }
 }
