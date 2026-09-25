@@ -24,8 +24,9 @@ class AvailabilityController extends Controller
 
         $service->setRelation('tenant', $tenant->load('businessHours'));
 
-        return SlotResource::collection(
-            $availableSlots->execute($service, $request->day(), $request->staffMember()),
-        );
+        $slots = $availableSlots->execute($service, $request->day(), $request->staffMember())
+            ->map->inTimezone($tenant->timezone);
+
+        return SlotResource::collection($slots)->additional(['meta' => ['timezone' => $tenant->timezone]]);
     }
 }

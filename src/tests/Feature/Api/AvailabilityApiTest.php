@@ -125,14 +125,14 @@ class AvailabilityApiTest extends BookingTestCase
     {
         $service = Service::factory()->for($this->tenant)->create();
 
-        $this->availability($service)->assertOk()->assertExactJson(['data' => []]);
+        $this->availability($service)->assertOk()->assertExactJson(['data' => [], 'meta' => ['timezone' => 'UTC']]);
     }
 
     public function test_closed_days_have_no_slots(): void
     {
         $this->availability($this->haircut, ['date' => '2026-10-04']) // Sunday
             ->assertOk()
-            ->assertExactJson(['data' => []]);
+            ->assertExactJson(['data' => [], 'meta' => ['timezone' => 'UTC']]);
     }
 
     public function test_slots_that_have_already_started_are_hidden(): void

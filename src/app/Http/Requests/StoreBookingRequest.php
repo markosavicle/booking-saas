@@ -9,10 +9,14 @@ use App\Models\StaffMember;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreBookingRequest extends FormRequest
 {
+    /** Wall-clock format used by the API, always in the tenant's timezone. */
     public const string TIME_FORMAT = 'Y-m-d H:i';
+
+    private ?Service $service = null;
 
     public function authorize(): bool
     {
@@ -21,23 +25,42 @@ class StoreBookingRequest extends FormRequest
 
     public function rules(): array
     {
-        $maxDate = today()->addDays((int) config('booking.max_advance_days'))->endOfDay();
-
         return [
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')->where('is_active', true)],
             'staff_member_id' => ['nullable', 'integer', Rule::exists('staff_members', 'id')->where('is_active', true)],
-            'start_time' => [
-                'required',
-                'date_format:'.self::TIME_FORMAT,
-                'after:now',
-                'before_or_equal:'.$maxDate->toDateTimeString(),
-            ],
+            // Range checks need the tenant's timezone, so they run in after().
+            'start_time' => ['required', 'date_format:'.self::TIME_FORMAT],
+        ];
+    }
+
+    /**
+     * @return list<callable(Validator): void>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                if ($validator->errors()->hasAny(['service_id', 'start_time'])) {
+                    return;
+                }
+
+                $start = $this->startTime();
+                $latest = $this->service()->tenant->localNow()
+                    ->addDays((int) config('booking.max_advance_days'))
+                    ->endOfDay();
+
+                if ($start->isPast()) {
+                    $validator->errors()->add('start_time', 'The start time must be in the future.');
+                } elseif ($start->greaterThan($latest)) {
+                    $validator->errors()->add('start_time', 'The start time is too far in advance.');
+                }
+            },
         ];
     }
 
     public function service(): Service
     {
-        return Service::with('tenant.businessHours')->findOrFail($this->integer('service_id'));
+        return $this->service ??= Service::with('tenant.businessHours')->findOrFail($this->integer('service_id'));
     }
 
     public function staffMember(): ?StaffMember
@@ -47,8 +70,14 @@ class StoreBookingRequest extends FormRequest
             : null;
     }
 
+    /**
+     * The requested start as a UTC instant; the input is wall-clock time at the shop.
+     */
     public function startTime(): CarbonImmutable
     {
-        return CarbonImmutable::createFromFormat(self::TIME_FORMAT, $this->validated('start_time'))->startOfMinute();
+        return $this->service()->tenant
+            ->localTime(self::TIME_FORMAT, (string) $this->input('start_time'))
+            ->startOfMinute()
+            ->utc();
     }
 }

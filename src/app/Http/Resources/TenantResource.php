@@ -20,6 +20,7 @@ class TenantResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'slug' => $this->slug,
+            'timezone' => $this->timezone,
             'business_hours' => $this->whenLoaded('businessHours', fn () => $this->businessHours
                 ->sortBy('day_of_week')
                 ->map(fn (BusinessHour $hours): array => [

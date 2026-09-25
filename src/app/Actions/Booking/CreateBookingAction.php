@@ -23,15 +23,18 @@ final readonly class CreateBookingAction
     ) {}
 
     /**
-     * Books $start for $customer. The tenant is always derived from the service.
-     * When no staff member is requested, the least busy free one is assigned.
+     * Books $start (any timezone; stored as UTC) for $customer. The tenant is always
+     * derived from the service. When no staff member is requested, the least busy
+     * free one is assigned.
      *
      * @throws ValidationException When the time is not a bookable slot or the staff member is unqualified.
      * @throws BookingConflictException When the slot was taken concurrently.
      */
     public function execute(User $customer, Service $service, CarbonImmutable $start, ?StaffMember $staff = null): Appointment
     {
-        $slot = $this->availableSlots->execute($service, $start, $staff)
+        $localDay = $start->setTimezone($service->tenant->timezone)->startOfDay();
+
+        $slot = $this->availableSlots->execute($service, $localDay, $staff)
             ->first(fn (Slot $slot): bool => $slot->start->equalTo($start));
 
         if ($slot === null) {
@@ -40,7 +43,7 @@ final readonly class CreateBookingAction
             ]);
         }
 
-        $appointment = DB::transaction(function () use ($customer, $service, $slot, $staff): Appointment {
+        $appointment = DB::transaction(function () use ($customer, $service, $slot, $staff, $localDay): Appointment {
             $candidateIds = $staff !== null
                 ? [$staff->id]
                 : $service->qualifiedStaff()->pluck('staff_members.id')->all();
@@ -49,7 +52,7 @@ final readonly class CreateBookingAction
             // (rather than appointment rows) also covers staff with no appointments yet.
             StaffMember::query()->whereKey($candidateIds)->orderBy('id')->lockForUpdate()->get(['id']);
 
-            $staffId = $this->leastBusyFreeStaff($candidateIds, $slot)
+            $staffId = $this->leastBusyFreeStaff($candidateIds, $slot, $localDay)
                 ?? throw BookingConflictException::slotTaken();
 
             return Appointment::create([
@@ -60,6 +63,8 @@ final readonly class CreateBookingAction
                 'start_time' => $slot->start,
                 'end_time' => $slot->end,
                 'status' => AppointmentStatus::Confirmed,
+                // The confirmation already covers bookings inside the reminder window.
+                'reminder_sent_at' => $this->withinReminderWindow($slot) ? now() : null,
             ]);
         });
 
@@ -68,15 +73,21 @@ final readonly class CreateBookingAction
         return $appointment->load(['tenant', 'service', 'staffMember']);
     }
 
+    private function withinReminderWindow(Slot $slot): bool
+    {
+        return $slot->start->lessThanOrEqualTo(now()->addHours((int) config('booking.reminder_lead_hours')));
+    }
+
     /**
      * @param  list<int>  $candidateIds
      */
-    private function leastBusyFreeStaff(array $candidateIds, Slot $slot): ?int
+    private function leastBusyFreeStaff(array $candidateIds, Slot $slot, CarbonImmutable $localDay): ?int
     {
+        // "Busiest" is measured over the shop's calendar day, bound to the query as UTC.
         $blocking = Appointment::query()
             ->blocking()
             ->whereIn('staff_member_id', $candidateIds)
-            ->overlapping($slot->start->startOfDay(), $slot->start->endOfDay())
+            ->overlapping($localDay->utc(), $localDay->endOfDay()->utc())
             ->get(['staff_member_id', 'start_time', 'end_time']);
 
         $busyNow = $blocking->filter->overlaps($slot->start, $slot->end)->pluck('staff_member_id')->unique();

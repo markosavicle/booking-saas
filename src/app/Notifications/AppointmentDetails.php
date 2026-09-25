@@ -26,7 +26,9 @@ final readonly class AppointmentDetails
             businessName: $appointment->tenant->name,
             serviceName: $appointment->service->name,
             staffName: $appointment->staffMember?->name,
-            when: $appointment->start_time->format('l, F j, Y \a\t H:i'),
+            when: $appointment->start_time
+                ->setTimezone($appointment->tenant->timezone)
+                ->format('l, F j, Y \a\t H:i T'),
         );
     }
 }

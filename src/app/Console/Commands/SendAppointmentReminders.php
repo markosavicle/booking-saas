@@ -13,13 +13,13 @@ use Illuminate\Console\Command;
 class SendAppointmentReminders extends Command
 {
     protected $signature = 'appointments:send-reminders
-        {--hours=24 : Remind about confirmed appointments starting within this many hours}';
+        {--hours= : Remind about confirmed appointments starting within this many hours (default: booking.reminder_lead_hours)}';
 
     protected $description = 'Queue reminders for upcoming confirmed appointments (each appointment is reminded at most once)';
 
     public function handle(): int
     {
-        $hours = (int) $this->option('hours');
+        $hours = (int) ($this->option('hours') ?? config('booking.reminder_lead_hours'));
 
         if ($hours < 1) {
             $this->error('--hours must be a positive integer.');

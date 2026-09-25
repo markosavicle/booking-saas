@@ -25,6 +25,7 @@ class Appointment extends Model
         'start_time',
         'end_time',
         'status',
+        'reminder_sent_at',
     ];
 
     protected function casts(): array

@@ -17,6 +17,11 @@ final readonly class Slot
         public array $staffIds,
     ) {}
 
+    public function inTimezone(string $timezone): self
+    {
+        return new self($this->start->setTimezone($timezone), $this->end->setTimezone($timezone), $this->staffIds);
+    }
+
     public function isAvailable(): bool
     {
         return $this->staffIds !== [];

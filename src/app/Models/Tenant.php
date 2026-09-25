@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,6 +18,7 @@ class Tenant extends Model
     protected $fillable = [
         'name',
         'slug',
+        'timezone',
     ];
 
     protected static function booted(): void
@@ -66,7 +68,23 @@ class Tenant extends Model
     }
 
     /**
-     * Opening hours for the given date, or null when the tenant is closed that day.
+     * The current moment on the tenant's wall clock.
+     */
+    public function localNow(): CarbonImmutable
+    {
+        return CarbonImmutable::now($this->timezone);
+    }
+
+    /**
+     * Interprets a wall-clock string (e.g. "2026-09-28" or "2026-09-28 09:00") in the tenant's zone.
+     */
+    public function localTime(string $format, string $value): CarbonImmutable
+    {
+        return CarbonImmutable::createFromFormat($format, $value, $this->timezone);
+    }
+
+    /**
+     * Opening hours for the given local date, or null when the tenant is closed that day.
      * Uses the eager-loaded relation when available to avoid N+1 queries.
      */
     public function hoursFor(CarbonInterface $date): ?BusinessHour

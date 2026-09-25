@@ -16,6 +16,9 @@ use Illuminate\Validation\ValidationException;
  * Builds the bookable grid for a service on a given day and marks which
  * qualified staff members are free for each slot. Runs a fixed number of
  * queries regardless of staff or appointment count.
+ *
+ * $date is a calendar day in the tenant's timezone (it selects the weekday's
+ * business hours); every slot it returns is a UTC instant.
  */
 final readonly class GetAvailableSlotsAction
 {

@@ -46,15 +46,16 @@ class AppointmentNotificationsTest extends TestCase
         $this->sms = new FakeSmsSender;
         $this->app->instance(SmsSender::class, $this->sms);
 
-        $tenant = Tenant::factory()->create(['name' => 'Acme Salon']);
+        $tenant = Tenant::factory()->create(['name' => 'Acme Salon', 'timezone' => 'Europe/Belgrade']);
         $service = Service::factory()->for($tenant)->create(['name' => 'Haircut']);
         $staff = StaffMember::factory()->for($tenant)->create(['name' => 'Anna']);
         $this->customer = User::factory()->create(['name' => 'Jane Doe', 'phone' => '+15551234567']);
 
+        // Stored as UTC; customers must see the shop's wall-clock time (UTC+2 in October).
         $this->appointment = Appointment::factory()
             ->forService($service)
             ->forStaff($staff)
-            ->at(CarbonImmutable::parse('2026-10-01 14:30'))
+            ->at(CarbonImmutable::parse('2026-10-01 12:30'))
             ->create(['user_id' => $this->customer->id]);
     }
 
@@ -67,20 +68,20 @@ class AppointmentNotificationsTest extends TestCase
             'confirmation' => [
                 AppointmentConfirmed::class,
                 'Booking confirmed - Acme Salon',
-                ['Hello Jane Doe', 'is confirmed', 'Service: Haircut', 'With: Anna', 'When: Thursday, October 1, 2026 at 14:30'],
-                'Acme Salon: your Haircut is confirmed for Thursday, October 1, 2026 at 14:30.',
+                ['Hello Jane Doe', 'is confirmed', 'Service: Haircut', 'With: Anna', 'When: Thursday, October 1, 2026 at 14:30 CEST'],
+                'Acme Salon: your Haircut is confirmed for Thursday, October 1, 2026 at 14:30 CEST.',
             ],
             'cancellation' => [
                 AppointmentCanceled::class,
                 'Booking canceled - Acme Salon',
-                ['Hello Jane Doe', 'Your Haircut appointment with Acme Salon on Thursday, October 1, 2026 at 14:30 has been canceled.'],
-                'Acme Salon: your Haircut on Thursday, October 1, 2026 at 14:30 has been canceled.',
+                ['Hello Jane Doe', 'Your Haircut appointment with Acme Salon on Thursday, October 1, 2026 at 14:30 CEST has been canceled.'],
+                'Acme Salon: your Haircut on Thursday, October 1, 2026 at 14:30 CEST has been canceled.',
             ],
             'reminder' => [
                 AppointmentReminder::class,
                 'Reminder: your appointment at Acme Salon',
-                ['Hello Jane Doe', 'reminder of your upcoming appointment', 'Service: Haircut', 'With: Anna', 'When: Thursday, October 1, 2026 at 14:30'],
-                'Reminder from Acme Salon: Haircut on Thursday, October 1, 2026 at 14:30.',
+                ['Hello Jane Doe', 'reminder of your upcoming appointment', 'Service: Haircut', 'With: Anna', 'When: Thursday, October 1, 2026 at 14:30 CEST'],
+                'Reminder from Acme Salon: Haircut on Thursday, October 1, 2026 at 14:30 CEST.',
             ],
         ];
     }
@@ -184,7 +185,7 @@ class AppointmentNotificationsTest extends TestCase
 
     public function test_a_reminder_is_not_delivered_once_the_appointment_has_started(): void
     {
-        $this->travelTo(CarbonImmutable::parse('2026-10-01 14:30'));
+        $this->travelTo(CarbonImmutable::parse('2026-10-01 12:30'));
 
         $this->customer->notifyNow(new AppointmentReminder($this->appointment));
 
