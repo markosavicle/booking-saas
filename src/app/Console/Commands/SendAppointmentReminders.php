@@ -1,32 +1,69 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
-use App\Jobs\SendBookingConfirmationJob;
+use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
+use App\Notifications\AppointmentReminder;
+use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
 
 class SendAppointmentReminders extends Command
 {
-    protected $signature = 'appointments:send-reminders';
-    protected $description = 'Send 24-hour email reminders for upcoming appointments';
+    protected $signature = 'appointments:send-reminders
+        {--hours=24 : Remind about confirmed appointments starting within this many hours}';
 
-    public function handle(): void
+    protected $description = 'Queue reminders for upcoming confirmed appointments (each appointment is reminded at most once)';
+
+    public function handle(): int
     {
-        $targetTime = now()->addDays(1)->startOfMinute();
+        $hours = (int) $this->option('hours');
 
-        // Find all appointments exactly 24 hours from now
-        $appointments = Appointment::with(['user', 'service', 'tenant'])
-            ->where('start_time', '>=', $targetTime)
-            ->where('start_time', '<', $targetTime->copy()->addMinute())
-            ->get();
+        if ($hours < 1) {
+            $this->error('--hours must be a positive integer.');
 
-        $this->info("Found {$appointments->count()} appointments requiring reminders.");
-
-        foreach ($appointments as $appointment) {
-            // Dispatch our refactored job that accepts the model
-            SendBookingConfirmationJob::dispatch($appointment);
-            $this->info("Dispatched reminder for Appointment ID: {$appointment->id}");
+            return self::INVALID;
         }
+
+        $now = now();
+        $sent = 0;
+
+        // A window rather than an exact minute, so a skipped or late scheduler run
+        // catches up instead of silently dropping reminders.
+        Appointment::query()
+            ->withoutGlobalScopes()
+            ->with(['user', 'tenant', 'service', 'staffMember'])
+            ->where('status', AppointmentStatus::Confirmed)
+            ->whereNull('reminder_sent_at')
+            ->where('start_time', '>', $now)
+            ->where('start_time', '<=', $now->copy()->addHours($hours))
+            ->lazyById(200)
+            ->each(function (Appointment $appointment) use ($now, &$sent): void {
+                if (! $this->claim($appointment, $now)) {
+                    return;
+                }
+
+                $appointment->user->notify(new AppointmentReminder($appointment));
+                $sent++;
+            });
+
+        $this->info("Queued {$sent} appointment reminder(s).");
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Atomically mark the reminder as sent. Only the process whose UPDATE flips the
+     * column from NULL wins, so overlapping runs can never double-send.
+     */
+    private function claim(Appointment $appointment, CarbonInterface $now): bool
+    {
+        return Appointment::query()
+            ->withoutGlobalScopes()
+            ->whereKey($appointment->getKey())
+            ->whereNull('reminder_sent_at')
+            ->update(['reminder_sent_at' => $now]) === 1;
     }
 }

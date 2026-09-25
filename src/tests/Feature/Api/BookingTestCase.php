@@ -10,6 +10,7 @@ use App\Models\StaffMember;
 use App\Models\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -38,6 +39,7 @@ abstract class BookingTestCase extends TestCase
     {
         parent::setUp();
 
+        Notification::fake();
         config(['booking.slot_interval_minutes' => 30, 'booking.max_advance_days' => 60]);
         $this->travelTo(CarbonImmutable::parse(self::MONDAY.' 08:00'));
 

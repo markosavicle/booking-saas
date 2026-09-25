@@ -53,6 +53,14 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(Appointment::class);
     }
 
+    /**
+     * Destination for the SMS notification channel; null disables SMS for this user.
+     */
+    public function routeNotificationForSms(): ?string
+    {
+        return $this->phone;
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->role === UserRole::SuperAdmin;

@@ -8,8 +8,10 @@ use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Notifications\AppointmentCanceled;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\TestResponse;
 
 class ManageBookingsTest extends BookingTestCase
@@ -39,6 +41,7 @@ class ManageBookingsTest extends BookingTestCase
             ->assertJsonPath('data.status', 'canceled');
 
         $this->assertSame(AppointmentStatus::Canceled, $this->appointment->fresh()->status);
+        Notification::assertSentToTimes($this->customer, AppointmentCanceled::class, 1);
         $this->getJson("/api/tenants/{$this->tenant->slug}/services/{$this->haircut->id}/availability?date=".self::MONDAY)
             ->assertJsonPath('data.0.staff_member_ids', [$this->anna->id, $this->ben->id]);
     }
@@ -46,11 +49,15 @@ class ManageBookingsTest extends BookingTestCase
     public function test_customers_cannot_cancel_someone_elses_booking(): void
     {
         $this->cancel(User::factory()->create())->assertForbidden();
+        Notification::assertNothingSent();
     }
 
     public function test_the_tenants_admin_can_cancel_but_other_tenant_admins_cannot_see_it(): void
     {
-        $this->cancel(User::factory()->tenantAdmin($this->tenant)->create())->assertOk();
+        $admin = User::factory()->tenantAdmin($this->tenant)->create();
+        $this->cancel($admin)->assertOk();
+        Notification::assertSentTo($this->customer, AppointmentCanceled::class);
+        Notification::assertNotSentTo($admin, AppointmentCanceled::class);
 
         $this->appointment->update(['status' => AppointmentStatus::Confirmed]);
         $this->cancel(User::factory()->tenantAdmin(Tenant::factory()->create())->create())->assertNotFound();
@@ -60,6 +67,7 @@ class ManageBookingsTest extends BookingTestCase
     {
         $this->cancel($this->customer)->assertOk();
         $this->cancel($this->customer)->assertConflict();
+        Notification::assertSentToTimes($this->customer, AppointmentCanceled::class, 1);
     }
 
     public function test_started_appointments_cannot_be_canceled(): void
@@ -68,6 +76,7 @@ class ManageBookingsTest extends BookingTestCase
 
         $this->cancel($this->customer)->assertConflict();
         $this->assertSame(AppointmentStatus::Confirmed, $this->appointment->fresh()->status);
+        Notification::assertNothingSent();
     }
 
     public function test_guests_cannot_cancel(): void

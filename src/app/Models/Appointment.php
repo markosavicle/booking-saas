@@ -32,6 +32,7 @@ class Appointment extends Model
         return [
             'start_time' => 'datetime',
             'end_time' => 'datetime',
+            'reminder_sent_at' => 'datetime',
             'status' => AppointmentStatus::class,
         ];
     }

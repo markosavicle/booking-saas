@@ -7,11 +7,11 @@ namespace App\Actions\Booking;
 use App\Data\Slot;
 use App\Enums\AppointmentStatus;
 use App\Exceptions\BookingConflictException;
-use App\Jobs\SendBookingConfirmationJob;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\StaffMember;
 use App\Models\User;
+use App\Notifications\AppointmentConfirmed;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -63,7 +63,7 @@ final readonly class CreateBookingAction
             ]);
         });
 
-        SendBookingConfirmationJob::dispatch($appointment);
+        $customer->notify(new AppointmentConfirmed($appointment));
 
         return $appointment->load(['tenant', 'service', 'staffMember']);
     }

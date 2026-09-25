@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature\Api;
 
 use App\Enums\AppointmentStatus;
-use App\Jobs\SendBookingConfirmationJob;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\StaffMember;
 use App\Models\User;
-use Illuminate\Support\Facades\Queue;
+use App\Notifications\AppointmentConfirmed;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -22,7 +22,6 @@ class CreateBookingTest extends BookingTestCase
     {
         parent::setUp();
 
-        Queue::fake();
         $this->customer = User::factory()->create();
     }
 
@@ -49,7 +48,11 @@ class CreateBookingTest extends BookingTestCase
         $appointment = Appointment::sole();
         $this->assertSame($this->tenant->id, $appointment->tenant_id, 'Tenant must come from the service, not the user.');
         $this->assertSame($this->customer->id, $appointment->user_id);
-        Queue::assertPushed(SendBookingConfirmationJob::class, 1);
+        Notification::assertSentToTimes($this->customer, AppointmentConfirmed::class, 1);
+        Notification::assertSentTo(
+            $this->customer,
+            fn (AppointmentConfirmed $notification): bool => $notification->appointment->is($appointment),
+        );
     }
 
     public function test_the_requested_staff_member_is_honoured(): void
@@ -83,7 +86,7 @@ class CreateBookingTest extends BookingTestCase
             ->assertExactJson(['message' => 'The selected time slot is no longer available.']);
 
         $this->assertSame(2, Appointment::count());
-        Queue::assertNothingPushed();
+        Notification::assertNothingSent();
     }
 
     public function test_it_returns_409_when_the_requested_staff_member_is_busy(): void
@@ -169,7 +172,7 @@ class CreateBookingTest extends BookingTestCase
     {
         $this->bookVia($payload)->assertUnprocessable()->assertJsonValidationErrors($field);
 
-        Queue::assertNothingPushed();
+        Notification::assertNothingSent();
     }
 
     public function test_inactive_services_cannot_be_booked(): void
