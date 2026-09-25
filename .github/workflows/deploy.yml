@@ -1,16 +1,60 @@
 name: Deploy Booking SaaS
+
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+# Never run two deploys against the same stack at once; let a running one finish.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: test
     runs-on: self-hosted
+    env:
+      # Dedicated clone + compose project. The dev checkout (~/docker/booking-saas)
+      # and its containers/volumes are never touched by this workflow.
+      DEPLOY_PATH: /home/markoserver/docker/production-booking-saas
+      COMPOSE_PROJECT_NAME: booking-prod
     steps:
-      - name: Deploy Application
+      - name: Deploy ${{ github.sha }}
         run: |
-          cd /home/markoserver/docker/booking-saas
-          git fetch origin main
-          git reset --hard origin/main
-          docker compose up -d --build
-          docker exec booking-app php artisan migrate --force
-          docker exec booking-app php artisan config:cache
+          set -euo pipefail
+
+          if [ ! -d "$DEPLOY_PATH/.git" ] || [ ! -f "$DEPLOY_PATH/.env" ] || [ ! -f "$DEPLOY_PATH/src/.env" ]; then
+            echo "::error::$DEPLOY_PATH is not bootstrapped (needs a git clone plus .env and src/.env). See the README deploy section."
+            exit 1
+          fi
+          cd "$DEPLOY_PATH"
+
+          dc() { docker compose "$@"; }
+          artisan() { dc exec -T app php artisan "$@"; }
+
+          # Maintenance mode with the *old* code while we swap; always lift it again.
+          if [ -n "$(dc ps -q --status running app)" ]; then
+            artisan down --retry=60 || true
+          fi
+          trap 'artisan up || true' EXIT
+
+          # Deploy exactly the commit that passed CI. Only tracked files are reset;
+          # ignored files (.env, vendor, storage) survive.
+          git fetch --prune origin
+          git reset --hard "$GITHUB_SHA"
+          git clean -fd
+
+          dc up -d --build --remove-orphans
+          dc up -d --wait mysql
+
+          dc exec -T app composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
+          dc exec -T app chown -R www-data:www-data storage bootstrap/cache
+
+          artisan migrate --force
+          artisan optimize
+          artisan filament:optimize
+          artisan queue:restart
