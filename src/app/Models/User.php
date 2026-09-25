@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -15,7 +17,6 @@ class User extends Authenticatable
         'tenant_id',
         'name',
         'email',
-        'role',
         'password',
     ];
 
@@ -32,8 +33,13 @@ class User extends Authenticatable
         ];
     }
 
-    public function tenant()
+    public function canAccessPanel(Panel $panel): bool
     {
-        return $this->belongsTo(Tenant::class);
+        return true; // Allows all users for now
+    }
+
+    public function getFilamentName(): string
+    {
+        return $this->name;
     }
 }
