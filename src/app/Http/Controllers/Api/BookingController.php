@@ -32,43 +32,30 @@ class BookingController extends Controller
     /**
      * Store a new appointment booking.
      */
-public function store(StoreBookingRequest $request): JsonResponse
-    {
-        try {
-            $user = $request->user();
-            $serviceId = $request->validated('service_id');
+     public function store(StoreBookingRequest $request): JsonResponse
+     {
+    	try {
+        $user = $request->user();
 
-            // 1. Save to database via your existing service
-            $appointment = $this->bookingService->createBooking(
-                tenantId: $user->tenant_id,
-                serviceId: $serviceId,
-                userId: $user->id,
-                startTime: $request->validated('start_time')
-            );
+        $appointment = $this->bookingService->createBooking(
+            tenantId: $user->tenant_id,
+            serviceId: $request->validated('service_id'),
+            userId: $user->id,
+            startTime: $request->validated('start_time')
+        );
 
-            // 2. We can load the service name from the relationships if we need it, 
-            // or pass a default to the email job if we are bypassing a complex query.
-            // For this phase, we'll let the worker job retrieve it if needed, or pass it directly.
-            $serviceName = Service::withoutGlobalScopes()->find($serviceId)?->name ?? 'Booked Service';
+        // Dispatch the refactored job using the Model!
+        SendBookingConfirmationJob::dispatch($appointment);
 
-            // 3. Dispatch the email job to Redis
-            SendBookingConfirmationJob::dispatch(
-                $user->email,
-                $user->name,
-                $user->tenant->name ?? 'Our Business',
-                $serviceName,
-                $request->validated('start_time')
-            );
+        return response()->json([
+            'message' => 'Booking confirmed successfully.',
+            'data' => $appointment,
+            'status' => 'email_queued'
+        ], 201);
 
-            return response()->json([
-                'message' => 'Booking confirmed successfully.',
-                'data' => $appointment,
-                'status' => 'email_queued'
-            ], 201);
-
-        } catch (Exception $e) {
-            $status = $e->getCode() === 409 ? 409 : 400;
-            return response()->json(['error' => $e->getMessage()], $status);
-        }
+    } catch (Exception $e) {
+        $status = $e->getCode() === 409 ? 409 : 400;
+        return response()->json(['error' => $e->getMessage()], $status);
     }
+  }
 }

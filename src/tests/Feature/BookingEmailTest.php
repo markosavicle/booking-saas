@@ -4,40 +4,37 @@ namespace Tests\Feature;
 
 use App\Jobs\SendBookingConfirmationJob;
 use App\Mail\BookingConfirmationMail;
-use Illuminate\Support\Facades\Mail;
+use App\Models\Appointment;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class BookingEmailTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_booking_confirmation_job_can_be_queued(): void
     {
         Queue::fake();
-
-        SendBookingConfirmationJob::dispatch(
-            'customer@example.com',
-            'Alex Smith',
-            'Acme Barbershop',
-            'Haircut & Beard Trim',
-            '2026-10-01 10:00 AM'
-        );
-
+        
+        $appointment = Appointment::factory()->create();
+        SendBookingConfirmationJob::dispatch($appointment);
+        
         Queue::assertPushed(SendBookingConfirmationJob::class);
     }
 
     public function test_mailable_renders_correct_booking_details(): void
     {
-        Mail::fake();
-
+        $appointment = Appointment::factory()->create();
+        
         $mailable = new BookingConfirmationMail(
-            'Alex Smith',
-            'Acme Barbershop',
-            'Haircut & Beard Trim',
-            '2026-10-01 10:00 AM'
+            $appointment->user->name,
+            $appointment->tenant->name,
+            $appointment->service->name,
+            $appointment->start_time->format('Y-m-d H:i:s')
         );
-
-        $mailable->assertSeeInHtml('Alex Smith');
-        $mailable->assertSeeInHtml('Acme Barbershop');
-        $mailable->assertSeeInHtml('Haircut & Beard Trim');
+        
+        $mailable->assertSeeInHtml($appointment->user->name);
+        $mailable->assertSeeInHtml($appointment->service->name);
     }
 }

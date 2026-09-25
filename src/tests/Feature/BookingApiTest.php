@@ -25,14 +25,17 @@ class BookingApiTest extends TestCase
         $service = Service::factory()->create(['name' => 'Massage']);
 
         // 2. Mock your internal BookingService so we don't trigger real scheduling logic
-        $this->mock(BookingService::class, function ($mock) {
-            $appointment = new \App\Models\Appointment();
-            $appointment->forceFill(['id' => 999]); // Bypasses mass assignment protection
+        $this->mock(BookingService::class, function ($mock) use ($user, $service) {
+        $appointment = \App\Models\Appointment::factory()->create([
+            'user_id' => $user->id,
+            'tenant_id' => $user->tenant_id,
+            'service_id' => $service->id,
+        ]);
 
-            $mock->shouldReceive('createBooking')
-                 ->once()
-                 ->andReturn($appointment);
-        });
+        $mock->shouldReceive('createBooking')
+             ->once()
+             ->andReturn($appointment);
+    });
 
         // 3. Authenticate and send the payload
         $response = $this->actingAs($user)->postJson('/api/bookings', [
