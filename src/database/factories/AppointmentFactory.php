@@ -7,8 +7,10 @@ namespace Database\Factories;
 use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
 use App\Models\Service;
+use App\Models\StaffMember;
 use App\Models\Tenant;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -49,6 +51,28 @@ class AppointmentFactory extends Factory
         return $this->state(fn (): array => [
             'tenant_id' => $service->tenant_id,
             'service_id' => $service->id,
+        ]);
+    }
+
+    /**
+     * Assign the appointment to a staff member (and their tenant).
+     */
+    public function forStaff(StaffMember $staff): static
+    {
+        return $this->state(fn (): array => [
+            'tenant_id' => $staff->tenant_id,
+            'staff_member_id' => $staff->id,
+        ]);
+    }
+
+    /**
+     * Occupy [start, start + minutes).
+     */
+    public function at(CarbonInterface $start, int $minutes = 30): static
+    {
+        return $this->state(fn (): array => [
+            'start_time' => $start,
+            'end_time' => $start->copy()->addMinutes($minutes),
         ]);
     }
 }

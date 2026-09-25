@@ -7,6 +7,7 @@ namespace Database\Seeders;
 use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
 use App\Models\Service;
+use App\Models\StaffMember;
 use App\Models\Tenant;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -25,6 +26,17 @@ class DatabaseSeeder extends Seeder
         ['name' => 'Signature Haircut', 'duration_minutes' => 30, 'price' => 25.00],
         ['name' => 'Beard Sculpting', 'duration_minutes' => 30, 'price' => 15.00],
         ['name' => 'VIP Full Treatment', 'duration_minutes' => 60, 'price' => 50.00],
+    ];
+
+    /**
+     * Staff per tenant; `null` means qualified for every service.
+     *
+     * @var array<string, list<string>|null>
+     */
+    private const array STAFF = [
+        'Marko' => null,
+        'Stefan' => null,
+        'Luka' => ['Signature Haircut', 'Beard Sculpting'],
     ];
 
     public function run(): void
@@ -53,11 +65,24 @@ class DatabaseSeeder extends Seeder
                 fn (array $service): Service => Service::factory()->for($tenant)->create($service),
             );
 
+            $staff = collect(self::STAFF)->map(
+                function (?array $serviceNames, string $name) use ($tenant, $services): StaffMember {
+                    $member = StaffMember::factory()->for($tenant)->create(['name' => $name]);
+                    $member->services()->attach(
+                        $services->filter(fn (Service $service): bool => $serviceNames === null
+                            || in_array($service->name, $serviceNames, true))->pluck('id')->all(),
+                    );
+
+                    return $member;
+                },
+            )->values();
+
             // Pre-booked slots on the next working day to exercise availability.
-            foreach (['10:00' => $services[0], '14:00' => $services[1]] as $time => $service) {
+            foreach ([['10:00', $services[0], $staff[0]], ['14:00', $services[1], $staff[1]]] as [$time, $service, $member]) {
                 $start = $bookingDay->setTimeFromTimeString($time);
 
                 Appointment::factory()->forService($service)->create([
+                    'staff_member_id' => $member->id,
                     'user_id' => $customers->random()->id,
                     'start_time' => $start,
                     'end_time' => $start->addMinutes($service->duration_minutes),

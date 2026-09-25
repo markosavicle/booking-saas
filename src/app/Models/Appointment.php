@@ -20,6 +20,7 @@ class Appointment extends Model
     protected $fillable = [
         'tenant_id',
         'service_id',
+        'staff_member_id',
         'user_id',
         'start_time',
         'end_time',
@@ -45,6 +46,11 @@ class Appointment extends Model
         return $this->belongsTo(Service::class);
     }
 
+    public function staffMember(): BelongsTo
+    {
+        return $this->belongsTo(StaffMember::class);
+    }
+
     /**
      * Appointments that occupy a calendar slot (i.e. not canceled).
      */
@@ -52,6 +58,14 @@ class Appointment extends Model
     protected function blocking(Builder $query): void
     {
         $query->whereIn($this->qualifyColumn('status'), AppointmentStatus::blocking());
+    }
+
+    /**
+     * In-memory counterpart of the overlapping() scope for already-loaded models.
+     */
+    public function overlaps(CarbonInterface $start, CarbonInterface $end): bool
+    {
+        return $this->start_time < $end && $this->end_time > $start;
     }
 
     /**

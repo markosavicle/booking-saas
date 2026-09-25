@@ -1,61 +1,51 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Booking\CancelBookingAction;
+use App\Actions\Booking\CreateBookingAction;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CancelBookingRequest;
 use App\Http\Requests\StoreBookingRequest;
-use App\Jobs\SendBookingConfirmationJob;
-use App\Models\Service;
-use App\Services\BookingService;
+use App\Http\Resources\AppointmentResource;
+use App\Models\Appointment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Exception;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class BookingController extends Controller
 {
-    public function __construct(protected BookingService $bookingService) {}
-
-    /**
-     * Get available slots for a given service and date.
-     */
-    public function availableSlots(Request $request, Service $service): JsonResponse
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $request->validate([
-            'date' => 'required|date_format:Y-m-d',
-        ]);
+        $appointments = $request->user()->appointments()
+            ->with(['tenant', 'service', 'staffMember'])
+            ->orderByDesc('start_time')
+            ->paginate();
 
-        $slots = $this->bookingService->getAvailableSlots($service, $request->query('date'));
-
-        return response()->json(['data' => $slots]);
+        return AppointmentResource::collection($appointments);
     }
 
-    /**
-     * Store a new appointment booking.
-     */
-     public function store(StoreBookingRequest $request): JsonResponse
-     {
-    	try {
-        $user = $request->user();
-
-        $appointment = $this->bookingService->createBooking(
-            tenantId: $user->tenant_id,
-            serviceId: $request->validated('service_id'),
-            userId: $user->id,
-            startTime: $request->validated('start_time')
+    public function store(StoreBookingRequest $request, CreateBookingAction $createBooking): JsonResponse
+    {
+        $appointment = $createBooking->execute(
+            $request->user(),
+            $request->service(),
+            $request->startTime(),
+            $request->staffMember(),
         );
 
-        // Dispatch the refactored job using the Model!
-        SendBookingConfirmationJob::dispatch($appointment);
-
-        return response()->json([
-            'message' => 'Booking confirmed successfully.',
-            'data' => $appointment,
-            'status' => 'email_queued'
-        ], 201);
-
-    } catch (Exception $e) {
-        $status = $e->getCode() === 409 ? 409 : 400;
-        return response()->json(['error' => $e->getMessage()], $status);
+        return (new AppointmentResource($appointment))->response()->setStatusCode(201);
     }
-  }
+
+    public function cancel(
+        CancelBookingRequest $request,
+        Appointment $appointment,
+        CancelBookingAction $cancelBooking,
+    ): AppointmentResource {
+        return new AppointmentResource(
+            $cancelBooking->execute($appointment)->load(['tenant', 'service', 'staffMember']),
+        );
+    }
 }

@@ -27,6 +27,8 @@ class AppointmentResource extends Resource
                 Forms\Components\Select::make('service_id')
                     ->relationship('service', 'name')
                     ->required(),
+                Forms\Components\Select::make('staff_member_id')
+                    ->relationship('staffMember', 'name'),
                 Forms\Components\Select::make('user_id')
                     ->relationship('user', 'name')
                     ->required(),
@@ -49,6 +51,9 @@ class AppointmentResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('service.name')
                     ->numeric()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('staffMember.name')
+                    ->label('Staff')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('user.name')
                     ->numeric()
