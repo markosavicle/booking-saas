@@ -1,18 +1,53 @@
 name: Laravel CI
+
 on:
   pull_request:
     branches: [ main ]
+
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    # Spin up a Redis service container alongside the runner
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite3, pdo_sqlite
+          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite3, pdo_sqlite, predis
+          coverage: none
+
+      - name: Copy .env.example
+        run: |
+          cd src
+          cp .env.example .env.testing
+
       - name: Install Composer Dependencies
-        run: cd src && composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+        run: |
+          cd src
+          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+      - name: Generate App Key & Prepare SQLite DB
+        run: |
+          cd src
+          php artisan key:generate --env=testing
+          touch database/database.sqlite
+
       - name: Run PHPUnit Tests
-        run: cd src && php artisan test --env=testing
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          REDIS_CLIENT: predis
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+        run: |
+          cd src
+          php artisan test
