@@ -1,10 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Traits;
 
 use App\Models\Scopes\TenantScope;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 
 trait BelongsToTenant
 {
@@ -12,9 +16,12 @@ trait BelongsToTenant
     {
         static::addGlobalScope(new TenantScope);
 
-        static::creating(function ($model) {
-            if (auth()->check() && auth()->user()->tenant_id) {
-                $model->tenant_id = auth()->user()->tenant_id;
+        // A tenant admin can only ever create records inside their own tenant.
+        static::creating(function ($model): void {
+            $user = Auth::user();
+
+            if ($user instanceof User && $user->isTenantAdmin()) {
+                $model->tenant_id = $user->tenant_id;
             }
         });
     }
