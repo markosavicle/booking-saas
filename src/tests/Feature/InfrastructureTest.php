@@ -12,7 +12,9 @@ class InfrastructureTest extends TestCase
     {
         $pdo = DB::connection()->getPdo();
         $this->assertInstanceOf(\PDO::class, $pdo);
-        $this->assertEquals('mysql', DB::connection()->getDriverName());
+	// Assert that the active driver matches what the environment configured
+        $expectedDriver = config('database.default');
+        $this->assertEquals($expectedDriver, DB::connection()->getDriverName());
     }
 
     public function test_redis_connection_is_successful(): void
