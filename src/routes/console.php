@@ -8,5 +8,5 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote')->hourly();
 
-// Add this line to run your new command every minute
 Schedule::command('app:test-schedule')->everyMinute();
+Schedule::command('appointments:send-reminders')->everyMinute();
