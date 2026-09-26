@@ -2,14 +2,26 @@
     $shopName = $tenant?->name ?? config('app.name');
     $staff = $tenant?->staffMembers ?? collect();
     $today = $tenant?->localNow()->dayOfWeek;
-    $initials = fn (string $name): string => Str::of($name)->explode(' ')->map(fn ($word) => Str::upper(Str::substr($word, 0, 1)))->take(2)->join('');
+    // Mirrors initials() in resources/js/booking.js: "Niš Classic Barbers" → "NC", "Niš" → "NI".
+    $initials = function (string $name): string {
+        $words = collect(preg_split('/\s+/u', $name))->map(fn (string $word) => preg_replace('/[^\p{L}\p{M}\p{N}]/u', '', $word))->filter()->values();
+        $letters = $words->count() === 1
+            ? grapheme_substr($words[0], 0, 2)
+            : $words->take(2)->map(fn (string $word) => grapheme_substr($word, 0, 1))->join('');
 
-    // Placeholder profile copy until tenants carry their own address/tagline/about columns.
-    $profile = [
-        'tagline' => 'Sharp cuts, hot towels and an honest pour. Walk in looking good, walk out looking better.',
-        'address' => ['Knez Mihailova 12', 'Belgrade 11000, Serbia'],
-        'phone' => '+381 11 123 4567',
+        return mb_strtoupper($letters);
+    };
+
+    // Shops fill these in the admin panel; generic copy covers the gaps, never a fake address.
+    $tagline = $tenant?->tagline ?: 'Sharp cuts, hot towels and an honest pour. Walk in looking good, walk out looking better.';
+    $about = $tenant?->aboutParagraphs() ?: [
+        'Low lights, good records and barbers who take their time. Every cut starts with a proper consultation and finishes with a hot towel, a straight-razor neckline and a style that still works on day five.',
+        "Grab a coffee or something stronger while you wait. Book online, show up, sit back. We'll handle the rest.",
     ];
+    $address = $tenant?->addressLines() ?? [];
+    $phone = $tenant?->phone;
+    $socials = array_filter(['Instagram' => $tenant?->social_instagram, 'Facebook' => $tenant?->social_facebook]);
+    $heroImage = $tenant?->heroImageUrl() ?? asset(\App\Models\Tenant::DEFAULT_HERO_IMAGE);
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full scroll-smooth scroll-pt-20 bg-ink-950">
@@ -19,7 +31,7 @@
     <meta name="theme-color" content="#09090a">
     <title>{{ $tenant ? "{$shopName} · Book your chair" : 'Book your chair · '.config('app.name') }}</title>
     <meta name="description" content="{{ $tenant ? "Book your next cut at {$shopName} in under a minute. No account needed." : 'Book your next cut in under a minute. No account needed.' }}">
-    <link rel="preload" as="image" href="{{ asset('images/hero-barbershop.jpg') }}" fetchpriority="high">
+    <link rel="preload" as="image" href="{{ $heroImage }}" fetchpriority="high">
     @fonts(['inter', 'playfair-display'])
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>[x-cloak] { display: none !important; }</style>
@@ -49,7 +61,7 @@
     {{-- Hero --}}
     <section class="relative isolate flex min-h-[88svh] items-end overflow-hidden pt-16 sm:items-center">
         <img
-            src="{{ asset('images/hero-barbershop.jpg') }}"
+            src="{{ $heroImage }}"
             alt=""
             class="absolute inset-0 -z-20 size-full object-cover object-[70%_center]"
             fetchpriority="high"
@@ -66,7 +78,7 @@
                 <h1 class="mt-5 font-display text-5xl leading-[1.05] font-semibold text-white sm:text-7xl">
                     {{ $shopName }}
                 </h1>
-                <p class="mt-5 max-w-md text-base leading-relaxed text-ink-300 sm:text-lg">{{ $profile['tagline'] }}</p>
+                <p class="mt-5 max-w-md text-base leading-relaxed text-ink-300 sm:text-lg">{{ $tagline }}</p>
 
                 <div class="mt-9 flex flex-col gap-3 sm:flex-row">
                     <a href="#book" class="btn-gold tap px-8">
@@ -94,30 +106,44 @@
             <p class="eyebrow">The shop</p>
             <h2 class="section-title mt-3">Old-school craft, <em class="gold-text italic">modern</em> chair.</h2>
             <div class="mt-6 space-y-4 text-base leading-relaxed text-ink-400">
-                <p>Low lights, good records and barbers who take their time. Every cut starts with a proper consultation and finishes with a hot towel, a straight-razor neckline and a style that still works on day five.</p>
-                <p>Grab a coffee or something stronger while you wait. Book online, show up, sit back. We'll handle the rest.</p>
+                @foreach ($about as $paragraph)
+                    <p>{{ $paragraph }}</p>
+                @endforeach
             </div>
 
+            @if ($address || $phone)
             <dl class="mt-10 grid gap-6 sm:grid-cols-2">
+                @if ($address)
                 <div class="flex gap-4">
                     <span class="flex size-11 shrink-0 items-center justify-center rounded-full border border-ink-700 text-gold-300">
                         <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg>
                     </span>
                     <div>
                         <dt class="text-sm font-semibold text-white">Find us</dt>
-                        <dd class="mt-1 text-sm leading-relaxed text-ink-400">{{ $profile['address'][0] }}<br>{{ $profile['address'][1] }}</dd>
+                        <dd class="mt-1 text-sm leading-relaxed text-ink-400">
+                            @foreach ($address as $line)
+                                {{ $line }}@unless ($loop->last)<br>@endunless
+                            @endforeach
+                        </dd>
+                        <dd class="mt-2">
+                            <a href="{{ $tenant->mapsUrl() }}" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold tracking-wide text-gold-300 hover:text-gold-200">Get directions &rarr;</a>
+                        </dd>
                     </div>
                 </div>
+                @endif
+                @if ($phone)
                 <div class="flex gap-4">
                     <span class="flex size-11 shrink-0 items-center justify-center rounded-full border border-ink-700 text-gold-300">
                         <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"/></svg>
                     </span>
                     <div>
                         <dt class="text-sm font-semibold text-white">Call</dt>
-                        <dd class="mt-1 text-sm text-ink-400 tabular-nums">{{ $profile['phone'] }}</dd>
+                        <dd class="mt-1 text-sm tabular-nums"><a href="{{ $tenant->phoneHref() }}" class="text-ink-400 hover:text-gold-300">{{ $phone }}</a></dd>
                     </div>
                 </div>
+                @endif
             </dl>
+            @endif
         </div>
 
         @if ($tenant)
@@ -233,13 +259,13 @@
 
                         <div class="grid gap-3 sm:grid-cols-2" x-show="tenants.length">
                             <template x-for="shop in tenants" :key="shop.id">
-                                <button type="button" class="card-interactive tap group flex items-center gap-4 p-5 text-left" @click="selectTenant(shop.slug)" :disabled="loading">
-                                    <span class="flex size-12 shrink-0 items-center justify-center rounded-full border border-gold-500/50 font-display text-lg text-gold-300" x-text="initials(shop.name)"></span>
+                                <button type="button" class="card-interactive tap group flex items-center gap-3 p-4 text-left sm:p-5" @click="selectTenant(shop.slug)" :disabled="loading" :title="shop.name">
+                                    <span class="flex size-11 shrink-0 items-center justify-center rounded-full border border-gold-500/50 font-display text-lg text-gold-300" x-text="initials(shop.name)"></span>
                                     <span class="min-w-0 flex-1">
-                                        <span class="block truncate font-display text-lg font-semibold text-white" x-text="shop.name"></span>
+                                        <span class="line-clamp-2 font-display text-lg leading-snug font-semibold text-balance break-words text-white" x-text="shop.name"></span>
                                         <span class="mt-0.5 block text-xs tracking-wide text-ink-400">View services</span>
                                     </span>
-                                    <svg class="size-5 text-ink-600 transition group-hover:translate-x-0.5 group-hover:text-gold-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.2 15.8a.75.75 0 0 1 0-1.06L11.94 10 7.2 5.26a.75.75 0 1 1 1.06-1.06l5.27 5.27a.75.75 0 0 1 0 1.06l-5.27 5.27a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
+                                    <svg class="size-5 shrink-0 text-ink-600 transition group-hover:translate-x-0.5 group-hover:text-gold-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.2 15.8a.75.75 0 0 1 0-1.06L11.94 10 7.2 5.26a.75.75 0 1 1 1.06-1.06l5.27 5.27a.75.75 0 0 1 0 1.06l-5.27 5.27a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
                                 </button>
                             </template>
                         </div>
@@ -272,7 +298,7 @@
                                         </span>
                                     </span>
                                     <span class="font-display text-2xl font-semibold text-gold-300" x-text="price(item.price)"></span>
-                                    <svg class="size-5 text-ink-600 transition group-hover:translate-x-0.5 group-hover:text-gold-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.2 15.8a.75.75 0 0 1 0-1.06L11.94 10 7.2 5.26a.75.75 0 1 1 1.06-1.06l5.27 5.27a.75.75 0 0 1 0 1.06l-5.27 5.27a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
+                                    <svg class="size-5 shrink-0 text-ink-600 transition group-hover:translate-x-0.5 group-hover:text-gold-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.2 15.8a.75.75 0 0 1 0-1.06L11.94 10 7.2 5.26a.75.75 0 1 1 1.06-1.06l5.27 5.27a.75.75 0 0 1 0 1.06l-5.27 5.27a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
                                 </button>
                             </template>
                         </div>
@@ -294,7 +320,7 @@
                     {{-- Barber: avatar rail --}}
                     <div class="mb-8" x-show="staffForService.length > 1">
                         <p class="eyebrow mb-3">Barber</p>
-                        <div class="scrollbar-none -mx-4 flex snap-x gap-3 overflow-x-auto overscroll-x-contain px-4 pb-1 sm:-mx-8 sm:px-8">
+                        <div class="rail -mx-4 flex snap-x gap-3 overflow-x-auto overscroll-x-contain px-4 pb-2 sm:-mx-8 sm:px-8" x-drag-scroll>
                             <button
                                 type="button"
                                 class="tap group flex w-[4.5rem] shrink-0 snap-start flex-col items-center gap-2"
@@ -333,7 +359,7 @@
                         <p class="text-xs text-ink-400" x-text="selectedDay?.long"></p>
                     </div>
                     <div class="relative -mx-4 sm:-mx-8">
-                        <div class="scrollbar-none flex snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto overscroll-x-contain px-4 pb-1 sm:scroll-px-8 sm:px-8">
+                        <div class="rail flex snap-x snap-mandatory scroll-px-4 gap-2 overflow-x-auto overscroll-x-contain px-4 pb-2 sm:scroll-px-8 sm:px-8" x-drag-scroll>
                             <template x-for="day in days" :key="day.iso">
                                 <button
                                     type="button"
@@ -555,28 +581,36 @@
             <p class="font-display text-xl font-semibold text-white">{{ $shopName }}</p>
             <p class="mt-3 max-w-xs text-sm leading-relaxed text-ink-400">Classic cuts, hot towel shaves and beard work.</p>
         </div>
+        @if ($address || $phone)
         <div>
             <p class="eyebrow">Visit</p>
             <address class="mt-3 text-sm leading-relaxed text-ink-400 not-italic">
-                {{ $profile['address'][0] }}<br>{{ $profile['address'][1] }}<br>
-                <span class="tabular-nums">{{ $profile['phone'] }}</span>
+                @foreach ($address as $line)
+                    {{ $line }}<br>
+                @endforeach
+                @if ($phone)
+                    <a href="{{ $tenant->phoneHref() }}" class="tabular-nums hover:text-gold-300">{{ $phone }}</a>
+                @endif
             </address>
         </div>
+        @endif
+        @if ($socials)
         <div>
             <p class="eyebrow">Follow</p>
-            {{-- Placeholder links until tenants store their social handles. --}}
             <div class="mt-3 flex gap-3">
-                <a href="#" class="tap flex size-10 items-center justify-center rounded-full border border-ink-700 text-ink-400 hover:border-gold-500/60 hover:text-gold-300" aria-label="Instagram">
+                @isset ($socials['Instagram'])
+                <a href="{{ $socials['Instagram'] }}" target="_blank" rel="noopener noreferrer" class="tap flex size-10 items-center justify-center rounded-full border border-ink-700 text-ink-400 hover:border-gold-500/60 hover:text-gold-300" aria-label="{{ $shopName }} on Instagram">
                     <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.8" fill="currentColor" stroke="none"/></svg>
                 </a>
-                <a href="#" class="tap flex size-10 items-center justify-center rounded-full border border-ink-700 text-ink-400 hover:border-gold-500/60 hover:text-gold-300" aria-label="Facebook">
+                @endisset
+                @isset ($socials['Facebook'])
+                <a href="{{ $socials['Facebook'] }}" target="_blank" rel="noopener noreferrer" class="tap flex size-10 items-center justify-center rounded-full border border-ink-700 text-ink-400 hover:border-gold-500/60 hover:text-gold-300" aria-label="{{ $shopName }} on Facebook">
                     <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.5 21v-7.5h2.5l.5-3h-3V8.75c0-.87.28-1.5 1.55-1.5H16.6V4.6a20 20 0 0 0-2.3-.1c-2.3 0-3.8 1.4-3.8 3.9v2.1H8v3h2.5V21h3Z"/></svg>
                 </a>
-                <a href="#" class="tap flex size-10 items-center justify-center rounded-full border border-ink-700 text-ink-400 hover:border-gold-500/60 hover:text-gold-300" aria-label="TikTok">
-                    <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.6 3h-3.1v12.2a2.7 2.7 0 1 1-2.7-2.7c.27 0 .53.04.78.11V9.43a5.8 5.8 0 1 0 5.02 5.77V9.1a7.4 7.4 0 0 0 4.4 1.43V7.45A4.4 4.4 0 0 1 16.6 3Z"/></svg>
-                </a>
+                @endisset
             </div>
         </div>
+        @endif
     </div>
     <div class="border-t border-ink-800">
         <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-6 text-xs text-ink-600 sm:flex-row sm:px-6">

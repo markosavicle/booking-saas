@@ -19,6 +19,7 @@ class TenantApiTest extends BookingTestCase
             ->assertOk()
             ->assertJsonPath('data.slug', $this->tenant->slug)
             ->assertJsonPath('data.timezone', 'UTC')
+            ->assertJsonPath('data.currency', 'EUR')
             ->assertJsonPath('data.business_hours.0', ['day_of_week' => 1, 'opens_at' => '09:00', 'closes_at' => '12:00'])
             ->assertJsonCount(6, 'data.business_hours')
             ->assertJsonPath('data.services.*.name', ['Haircut', 'VIP'])

@@ -65,6 +65,21 @@
     }
 }
 
+/* Horizontal scroller (pair with x-drag-scroll): invisible scrollbar on touch, a slim one plus grab cursor for mice. */
+@utility rail {
+    @apply scrollbar-none;
+    @media (pointer: fine) {
+        cursor: grab;
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-ink-700) transparent;
+    }
+    &[data-dragging] {
+        cursor: grabbing;
+        scroll-snap-type: none;
+        user-select: none;
+    }
+}
+
 /* Selectable pill (date, time, barber); pair with aria-pressed so state and styling can't drift. */
 @utility chip {
     @apply tap rounded-2xl border border-ink-700 bg-ink-800/60 text-white hover:border-gold-500/60 focus-visible:border-gold-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-ink-600 disabled:active:scale-100;

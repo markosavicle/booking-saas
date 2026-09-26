@@ -10,11 +10,20 @@ use App\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class DatabaseSeederTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The seeder publishes hero photos to the public disk; never write them to the real one.
+        Storage::fake('public');
+    }
 
     public function test_seeder_builds_a_consistent_dataset(): void
     {
@@ -38,6 +47,22 @@ class DatabaseSeederTest extends TestCase
                         && $service->staffMembers->every(fn ($staff): bool => $staff->tenant_id === $tenant->id),
                 ));
             });
+    }
+
+    public function test_seeded_shops_have_landing_page_profiles(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $tenants = Tenant::orderBy('id')->get();
+
+        $this->assertTrue($tenants->every(fn (Tenant $tenant): bool => filled($tenant->tagline)
+            && count($tenant->addressLines()) === 2
+            && filled($tenant->phone)
+            && filled($tenant->about_text)));
+
+        $heroes = $tenants->pluck('hero_image_path')->filter();
+        $this->assertCount(2, $heroes->unique(), 'Expected two distinct stock photos plus one default fallback.');
+        $heroes->each(fn (string $path) => Storage::disk('public')->assertExists($path));
     }
 
     public function test_tenant_admin_emails_are_ascii(): void
