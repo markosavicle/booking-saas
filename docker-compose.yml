@@ -1,6 +1,10 @@
 services:
   app:
-    build: ./docker/php
+    build: &php-build
+      context: ./docker/php
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
     container_name: ${CONTAINER_PREFIX:-booking}-app
     restart: unless-stopped
     volumes:
@@ -8,8 +12,37 @@ services:
     networks:
       - booking-net
     depends_on:
-      - mysql
-      - redis
+      permissions:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
+
+  # One-shot, runs on every `docker compose up`: hands anything in the writable dirs that a
+  # root or legacy-UID process left behind back to www-data (= the host user), then exits.
+  permissions:
+    build: *php-build
+    user: root
+    restart: 'no'
+    volumes:
+      - ./src:/var/www/html
+    command: >-
+      sh -c 'mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs storage/app/public bootstrap/cache
+      && find storage bootstrap/cache \( ! -user www-data -o ! -group www-data \) -exec chown -h www-data:www-data {} +
+      && find storage bootstrap/cache -type d ! -perm -u=rwx -exec chmod u+rwx {} +'
+
+  # Frontend tooling as the host user, so public/build is never root-owned:
+  #   docker compose run --rm node npm ci && docker compose run --rm node npm run build
+  node:
+    image: node:22-alpine
+    profiles: [tools]
+    user: ${HOST_UID:-1000}:${HOST_GID:-1000}
+    working_dir: /app
+    environment:
+      npm_config_cache: /tmp/.npm
+    volumes:
+      - ./src:/app
 
   webserver:
     image: nginx:alpine
@@ -63,7 +96,7 @@ services:
       - booking-net
       - nginx-net
   queue:
-    build: ./docker/php
+    build: *php-build
     container_name: ${CONTAINER_PREFIX:-booking}-queue
     restart: unless-stopped
     command: php artisan queue:work --tries=3 --sleep=3
@@ -72,11 +105,15 @@ services:
     networks:
       - booking-net
     depends_on:
-      - mysql
-      - redis
+      permissions:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
 
   scheduler:
-    build: ./docker/php
+    build: *php-build
     container_name: ${CONTAINER_PREFIX:-booking}-scheduler
     restart: unless-stopped
     command: php artisan schedule:work
@@ -85,8 +122,12 @@ services:
     networks:
       - booking-net
     depends_on:
-      - mysql
-      - redis
+      permissions:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_started
 
 networks:
   booking-net:

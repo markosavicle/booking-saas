@@ -33,6 +33,10 @@ jobs:
           fi
           cd "$DEPLOY_PATH"
 
+          # Build the PHP image with www-data remapped to the runner user, so every process
+          # in the stack owns what it writes (see docker/php/Dockerfile).
+          export HOST_UID="$(id -u)" HOST_GID="$(id -g)"
+
           dc() { docker compose "$@"; }
           artisan() { dc exec -T app php artisan "$@"; }
 
@@ -54,13 +58,13 @@ jobs:
           dc restart webserver
           dc up -d --wait mysql
 
+          # `up` already ran the one-shot permissions service; repeat it explicitly so a deploy
+          # never continues on a tree a root or old-UID process left behind.
+          dc run --rm --no-deps permissions
           dc exec -T app composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
-          dc exec -T app chown -R www-data:www-data storage bootstrap/cache
 
           # public/build is not committed; build it in a throwaway Node container.
-          docker run --rm -u "$(id -u):$(id -g)" -e npm_config_cache=/tmp/.npm \
-            -v "$DEPLOY_PATH/src:/app" -w /app node:22-alpine \
-            sh -c 'npm ci --no-audit --no-fund && npm run build'
+          dc run --rm node sh -c 'npm ci --no-audit --no-fund && npm run build'
 
           artisan storage:link
           artisan migrate --force

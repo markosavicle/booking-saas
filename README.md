@@ -83,6 +83,7 @@ Single database, shared schema, with a `tenant_id` on every tenant-owned table.
 
 | Service | Purpose |
 |---|---|
+| `permissions` | One-shot: repairs `storage/` and `bootstrap/cache/` ownership before PHP starts |
 | `app` | PHP-FPM application |
 | `webserver` | nginx serving `public/` and passing PHP to `app` |
 | `queue` | `queue:work` for notifications |
@@ -90,6 +91,7 @@ Single database, shared schema, with a `tenant_id` on every tenant-owned table.
 | `mysql` | Database, with a named volume |
 | `redis` | Cache, queues and rate limits |
 | `mailpit` | Local e-mail inbox |
+| `node` | Frontend tooling on demand (`tools` profile), runs as the host user |
 
 `CONTAINER_PREFIX` and the port variables in the root `.env` let dev and prod stacks run side by side on one host.
 
@@ -103,16 +105,16 @@ Nginx Proxy Manager terminates TLS and reaches the stack over the shared externa
   - The client IP is taken from `X-Real-IP`, because the proxy appends to a client-supplied `X-Forwarded-For`.
 - **Upload limits:** raised consistently in nginx (`client_max_body_size`) and PHP (`docker/php/uploads.ini`).
 
-### File permissions (Linux ACLs)
+### File permissions
 
-The source is bind-mounted into the containers. PHP-FPM runs as `www-data` while deploys and builds run as the host user, so both need write access to `storage` and `bootstrap/cache` without resorting to `chmod 777`. POSIX ACLs grant both users access, and *default* ACLs make new files and directories inherit the same rules:
+The source is bind-mounted into every PHP container, so the containers and the host user share one file tree. Rather than juggling two owners with ACLs, **every process runs as one UID that matches the host user**:
 
-```bash
-cd src
-sudo setfacl -R  -m u:www-data:rwX -m u:"$USER":rwX storage bootstrap/cache
-sudo setfacl -dR -m u:www-data:rwX -m u:"$USER":rwX storage bootstrap/cache
-getfacl storage   # verify
-```
+- **Remapped user:** `docker/php/Dockerfile` remaps `www-data` to `HOST_UID`/`HOST_GID` (default `1000`) and makes it the image's default user. PHP-FPM, the queue worker, the scheduler and every `docker compose exec app php artisan …` therefore create files as the same user that runs `git pull`.
+- **Why not ACLs:** ACLs can grant write access, but not ownership. Blade's `touch($compiled, $mtime)` sets an explicit mtime, which the kernel only allows for the file's owner. That is the source of `touch(): Utime failed: Operation not permitted` whenever a root-run artisan command compiled a view that PHP-FPM later refreshed.
+- **Self-healing:** a one-shot `permissions` service runs as root on every `docker compose up`, before the PHP containers start. It hands anything in `storage/` and `bootstrap/cache/` that a root or old-UID process left behind back to `www-data`. The deploy workflow runs it again explicitly.
+- **Frontend builds:** these run through the `node` tools service as the host user, so `public/build` is never root-owned.
+
+If your host UID/GID isn't 1000, set `HOST_UID`/`HOST_GID` in the root `.env` and rebuild. Avoid `docker compose exec -u root app php artisan …`. If it happens anyway, the next `docker compose up -d` (or `docker compose run --rm permissions`) repairs the tree.
 
 ### CI/CD (GitHub Actions)
 
@@ -121,8 +123,8 @@ getfacl storage   # verify
   1. Maintenance mode on.
   2. `git reset --hard <sha>`.
   3. `docker compose up -d --build`, then restart nginx so the bind-mounted config is reloaded.
-  4. `composer install --no-dev`.
-  5. Build the frontend in a throwaway Node container.
+  4. Repair file ownership (`permissions` service), then `composer install --no-dev`.
+  5. Build the frontend in the `node` service, as the runner user.
   6. `storage:link`, `migrate --force`, `optimize`, `filament:optimize`, `queue:restart`.
   7. Maintenance mode off, even if a step fails.
 
@@ -156,7 +158,7 @@ Then re-run the "Deploy Booking SaaS" workflow (Actions → Run workflow) and po
 
 ```bash
 git clone https://github.com/markosavicle/booking-saas.git && cd booking-saas
-cp .env.example .env            # DB credentials, container prefix, ports
+cp .env.example .env            # DB credentials, container prefix, ports, HOST_UID/HOST_GID
 cp src/.env.example src/.env    # set DB_CONNECTION=mysql, DB_HOST=mysql and matching credentials; SMS_DRIVER=log
 
 docker compose up -d --build
@@ -165,8 +167,8 @@ docker compose exec app php artisan key:generate
 docker compose exec app php artisan migrate --seed
 docker compose exec app php artisan storage:link
 
-# Frontend assets, built in a throwaway Node container as your own user
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/src:/app" -w /app node:22-alpine sh -c 'npm ci && npm run build'
+# Frontend assets, built as your own user (never as root)
+docker compose run --rm node sh -c 'npm ci && npm run build'
 ```
 
 Then open:
