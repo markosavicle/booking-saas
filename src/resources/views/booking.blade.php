@@ -1,6 +1,5 @@
 @php
     $shopName = $tenant?->name ?? config('app.name');
-    $staff = $tenant?->staffMembers ?? collect();
     $today = $tenant?->localNow()->dayOfWeek;
     // Mirrors initials() in resources/js/booking.js: "Niš Classic Barbers" → "NC", "Niš" → "NI".
     $initials = function (string $name): string {
@@ -549,26 +548,36 @@
     @if ($staff->isNotEmpty())
         <section id="team" class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
             <div class="text-center">
-                <p class="eyebrow">The team</p>
+                <p class="eyebrow">{{ $tenant ? 'The team' : 'Meet the barbers' }}</p>
                 <h2 class="section-title mt-3">Hands you can <em class="gold-text italic">trust</em></h2>
             </div>
 
             <ul class="mt-12 grid grid-cols-2 gap-x-4 gap-y-10 sm:grid-cols-3 lg:grid-cols-4">
                 @foreach ($staff as $member)
-                    <li class="group text-center">
+                    <li class="group relative text-center">
                         <div class="mx-auto flex size-28 items-center justify-center rounded-full bg-gradient-to-b from-gold-300 to-gold-600 p-[2px] transition duration-300 group-hover:shadow-xl group-hover:shadow-gold-500/20 sm:size-32">
                             <span class="flex size-full items-center justify-center rounded-full bg-ink-900 font-display text-3xl font-semibold text-gold-300">
                                 {{ $initials($member->name) }}
                             </span>
                         </div>
-                        <p class="mt-5 font-display text-xl font-semibold text-white">{{ $member->name }}</p>
-                        <p class="mt-1 text-xs font-semibold tracking-[0.2em] text-ink-400 uppercase">Barber</p>
+                        @if ($tenant)
+                            <p class="mt-5 font-display text-xl font-semibold text-white">{{ $member->name }}</p>
+                            <p class="mt-1 text-xs font-semibold tracking-[0.2em] text-ink-400 uppercase">Barber</p>
+                        @else
+                            <p class="mt-5 font-display text-xl font-semibold text-white">
+                                {{-- Stretched link: the whole card opens the barber's shop. --}}
+                                <a href="{{ route('booking', $member->tenant) }}" class="after:absolute after:-inset-2 after:rounded-2xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-gold-400">{{ $member->name }}</a>
+                            </p>
+                            <p class="mt-1 text-xs font-semibold tracking-[0.2em] text-ink-400 uppercase">
+                                Barber <span class="text-gold-400">@</span> <span class="transition group-hover:text-gold-300">{{ $member->tenant->name }}</span>
+                            </p>
+                        @endif
                     </li>
                 @endforeach
             </ul>
 
             <div class="mt-14 text-center">
-                <a href="#book" class="btn-ghost tap">Book with the team</a>
+                <a href="#book" class="btn-ghost tap">{{ $tenant ? 'Book with the team' : 'Pick a shop to book' }}</a>
             </div>
         </section>
     @endif

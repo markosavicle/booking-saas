@@ -10,6 +10,7 @@ use App\Filament\Resources\TenantResource\Pages\EditTenant;
 use App\Filament\Resources\TenantResource\Pages\ListTenants;
 use App\Models\Tenant;
 use App\Models\User;
+use Filament\Forms\Components\Select;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -102,5 +103,22 @@ class TenantResourceTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertDatabaseHas('tenants', ['name' => 'Kragujevac Cuts', 'slug' => 'kragujevac-cuts', 'currency' => 'RSD']);
+    }
+
+    public function test_the_timezone_select_ships_every_zone_with_the_page(): void
+    {
+        $this->actingAs(User::factory()->tenantAdmin($this->shop)->create());
+
+        Livewire::test(EditTenant::class, ['record' => $this->shop->getRouteKey()])
+            ->assertFormFieldExists('timezone', function (Select $field): bool {
+                return ! $field->hasDynamicOptions()
+                    && $field->getOptions()['Europe/Belgrade'] === 'Europe/Belgrade'
+                    && $field->getOptionsLimit() >= count($field->getOptions());
+            })
+            ->fillForm(['timezone' => 'America/New_York'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('America/New_York', $this->shop->refresh()->timezone);
     }
 }
