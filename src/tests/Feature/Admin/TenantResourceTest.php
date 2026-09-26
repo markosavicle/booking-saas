@@ -50,6 +50,16 @@ class TenantResourceTest extends TestCase
         $this->get(TenantResource::getUrl('create'))->assertForbidden();
     }
 
+    public function test_only_a_super_admin_gets_the_new_shop_button(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+        Livewire::test(ListTenants::class)->assertActionVisible('create');
+        $this->get(TenantResource::getUrl('index'))->assertSee(TenantResource::getUrl('create'), false);
+
+        $this->actingAs(User::factory()->tenantAdmin($this->shop)->create());
+        Livewire::test(ListTenants::class)->assertActionHidden('create');
+    }
+
     public function test_a_tenant_admin_can_publish_their_landing_page_profile(): void
     {
         $this->actingAs(User::factory()->tenantAdmin($this->shop)->create());

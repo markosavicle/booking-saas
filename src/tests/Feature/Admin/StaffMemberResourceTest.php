@@ -52,6 +52,32 @@ class StaffMemberResourceTest extends TestCase
         $this->get(StaffMemberResource::getUrl('edit', ['record' => $foreign]))->assertNotFound();
     }
 
+    public function test_super_admins_and_shop_admins_both_get_the_new_staff_button(): void
+    {
+        foreach ([User::factory()->superAdmin()->create(), User::factory()->tenantAdmin($this->shop)->create()] as $admin) {
+            $this->actingAs($admin);
+
+            Livewire::test(ListStaffMembers::class)->assertActionVisible('create');
+            $this->get(StaffMemberResource::getUrl('index'))->assertSee(StaffMemberResource::getUrl('create'), false);
+            $this->get(StaffMemberResource::getUrl('create'))->assertOk();
+        }
+    }
+
+    public function test_a_super_admin_adds_a_barber_to_any_shop(): void
+    {
+        $cut = Service::factory()->for($this->rival)->create();
+
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        Livewire::test(CreateStaffMember::class)
+            ->assertFormFieldIsVisible('tenant_id')
+            ->fillForm(['tenant_id' => $this->rival->id, 'name' => 'Nikola', 'services' => [$cut->id]])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame($this->rival->id, StaffMember::where('name', 'Nikola')->sole()->tenant_id);
+    }
+
     public function test_a_shop_admin_adds_a_barber_to_their_own_shop_without_picking_one(): void
     {
         $cut = Service::factory()->for($this->shop)->create(['name' => 'Cut']);
