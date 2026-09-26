@@ -201,6 +201,7 @@ class Tenant extends Model
     public static function defaultFaqs(): array
     {
         $leadHours = (int) config('booking.reminder_lead_hours');
+        $codeMinutes = (int) config('booking.otp.ttl_minutes');
 
         return [
             [
@@ -210,6 +211,14 @@ class Tenant extends Model
             [
                 'question' => 'How do I cancel or reschedule?',
                 'answer' => 'Your confirmation SMS and e-mail contain a private cancellation link. Use it any time before the appointment starts; cancelling is free. To move a booking, cancel it and pick a new time.',
+            ],
+            [
+                'question' => 'Do I pay when I book?',
+                'answer' => 'No. Booking is free and nothing is charged online. You pay at the shop after your appointment.',
+            ],
+            [
+                'question' => "My code didn't arrive. What now?",
+                'answer' => "Codes usually arrive within a minute and stay valid for {$codeMinutes} minutes. Check that your number includes the country code, then tap \"Resend code\" once the timer runs out. To stop abuse, only a few codes can be sent per hour.",
             ],
             [
                 'question' => 'Will I get a reminder?',
@@ -222,6 +231,10 @@ class Tenant extends Model
             [
                 'question' => 'Can I hold more than one booking?',
                 'answer' => 'Each phone number can hold one upcoming appointment per shop. Once it has passed or been cancelled, you can book the next one.',
+            ],
+            [
+                'question' => "What if I'm running late?",
+                'answer' => 'Call the shop as soon as you can; its number is on this page. Your time is held for you, but a late start can mean a shorter service or moving to the next free slot.',
             ],
             [
                 'question' => 'Do you take walk-ins?',

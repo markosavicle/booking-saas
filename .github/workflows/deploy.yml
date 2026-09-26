@@ -83,8 +83,7 @@ jobs:
           # --build: rebuild images from the new Dockerfiles. --remove-orphans: drop containers of
           # services that were removed from this project's compose file.
           dc up -d --build --remove-orphans
-          # default.conf is a single-file bind mount; git reset swaps its inode, so nginx
-          # keeps the old config until the container is restarted.
+          # nginx reads docker/nginx only at start, so a changed config needs a restart to apply.
           dc restart webserver
           dc up -d --wait mysql redis
 

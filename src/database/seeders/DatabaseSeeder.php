@@ -12,19 +12,17 @@ use App\Models\Tenant;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
     /**
-     * `hero` names a stock photo in database/seeders/images; null exercises the bundled default.
+     * Photos, galleries and FAQs for these shops come from DemoContentSeeder.
      */
     private const array TENANTS = [
         [
             'name' => 'Belgrade Central Cuts',
             'city' => 'Belgrade',
-            'hero' => 'barbershop-interior.jpg',
             'profile' => [
                 'tagline' => 'Straight-razor shaves and sharp fades a block from Republic Square.',
                 'about_text' => "Exposed brick, leather chairs and a record player that never stops. We've been cutting Dorćol's hair since 2014, and every appointment still starts with a proper consultation.\n\nCome in early for an espresso on the house.",
@@ -37,7 +35,6 @@ class DatabaseSeeder extends Seeder
         [
             'name' => 'Novi Sad Fade Studio',
             'city' => 'Novi Sad',
-            'hero' => 'barbershop-fade.jpg',
             'profile' => [
                 'tagline' => 'Skin fades, textured crops and beard work for the Danube crowd.',
                 'about_text' => "A small, loud studio off Zmaj Jovina where fades are measured in millimetres. Our barbers train every month so the latest styles reach Novi Sad before they're everywhere.\n\nWalk-ins welcome when the chairs are free; booking guarantees your slot.",
@@ -50,7 +47,6 @@ class DatabaseSeeder extends Seeder
         [
             'name' => 'Niš Classic Barbers',
             'city' => 'Niš',
-            'hero' => null,
             'profile' => [
                 'tagline' => 'Old-school cuts and hot towel shaves in the heart of Niš.',
                 'about_text' => 'Three generations of barbers, one chair at a time. Classic scissor cuts, hot towels and a neckline you can set your watch by.',
@@ -96,7 +92,6 @@ class DatabaseSeeder extends Seeder
                 'name' => $data['name'],
                 'timezone' => 'Europe/Belgrade',
                 'currency' => 'EUR',
-                'hero_image_path' => $data['hero'] ? $this->publishHeroImage($data['hero']) : null,
                 ...$data['profile'],
             ]);
 
@@ -135,17 +130,8 @@ class DatabaseSeeder extends Seeder
                 ]);
             }
         }
-    }
 
-    /**
-     * Copies a bundled stock photo onto the public disk, exactly where an admin upload would land.
-     */
-    private function publishHeroImage(string $filename): string
-    {
-        $path = Tenant::HERO_DIRECTORY.'/'.$filename;
-        Storage::disk('public')->put($path, file_get_contents(database_path("seeders/images/{$filename}")));
-
-        return $path;
+        $this->call(DemoContentSeeder::class);
     }
 
     private function nextWorkingDay(): CarbonImmutable

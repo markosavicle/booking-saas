@@ -44,6 +44,41 @@ services:
     volumes:
       - ./src:/app
 
+  # Database browser for debugging. Opt-in (never started by `up` or the deploy) and bound to
+  # the host's loopback only, so it is unreachable from the LAN or the internet:
+  #   docker compose --profile debug up -d adminer   ->  http://127.0.0.1:8082
+  # Log in with DB_USERNAME / DB_PASSWORD from src/.env (server "mysql" is prefilled).
+  # Stop it when done: docker compose --profile debug stop adminer
+  adminer:
+    image: adminer:5
+    profiles: [debug]
+    container_name: ${CONTAINER_PREFIX:-booking}-adminer
+    restart: 'no'
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    ports:
+      - '127.0.0.1:${ADMINER_PORT:-8082}:8080'
+    networks:
+      - booking-net
+    depends_on:
+      - mysql
+
+  # Public HTTPS without opening a port on the router (docs/deployment.md). Opt-in per stack:
+  # put COMPOSE_PROFILES=tunnel and CLOUDFLARE_TUNNEL_TOKEN in that stack's root .env, then
+  # point the tunnel's public hostname at http://webserver:8080 in the Cloudflare dashboard.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: [tunnel]
+    container_name: ${CONTAINER_PREFIX:-booking}-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    networks:
+      - booking-net
+    depends_on:
+      - webserver
+
   webserver:
     image: nginx:alpine
     container_name: ${CONTAINER_PREFIX:-booking}-web
@@ -52,7 +87,8 @@ services:
       - '${WEB_PORT:-8090}:80'
     volumes:
       - ./src:/var/www/html:ro
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # The whole folder: default.conf plus the laravel.inc snippet it includes.
+      - ./docker/nginx:/etc/nginx/conf.d:ro
     networks:
       - booking-net
       - nginx-net
