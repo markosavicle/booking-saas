@@ -40,6 +40,7 @@ final readonly class ConfirmBookingOtpAction
 
         $customer = $this->resolveCustomer->execute($draft->phone, $draft->name, $draft->email);
 
-        return $this->createBooking->execute($customer, $service, $draft->start, $staff);
+        // The account may not take an e-mail another account owns, but this booking's mail still goes there.
+        return $this->createBooking->execute($customer, $service, $draft->start, $staff, $draft->email);
     }
 }
