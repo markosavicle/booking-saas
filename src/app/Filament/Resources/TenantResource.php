@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TenantResource\Pages;
+use App\Models\GalleryImage;
 use App\Models\Tenant;
 use App\Models\User;
 use DateTimeZone;
@@ -33,6 +34,10 @@ class TenantResource extends Resource
         'GBP' => 'British pound (£)',
         'CHF' => 'Swiss franc (CHF)',
     ];
+
+    private const int MAX_GALLERY_IMAGES = 12;
+
+    private const int MAX_FAQS = 12;
 
     public static function form(Form $form): Form
     {
@@ -103,6 +108,56 @@ class TenantResource extends Resource
                             ->visibility('public')
                             ->columnSpanFull(),
                     ]),
+                Forms\Components\Section::make('Gallery')
+                    ->description('Cuts, beard work and the shop itself. Drag to reorder; the first photos are shown largest.')
+                    ->collapsible()
+                    ->schema([
+                        Forms\Components\Repeater::make('galleryImages')
+                            ->hiddenLabel()
+                            ->relationship()
+                            ->orderColumn('sort_order')
+                            ->defaultItems(0)
+                            ->grid(['md' => 2, 'xl' => 3])
+                            ->maxItems(self::MAX_GALLERY_IMAGES)
+                            ->addActionLabel('Add photo')
+                            ->itemLabel(fn (array $state): ?string => $state['caption'] ?? null)
+                            ->schema([
+                                Forms\Components\FileUpload::make('path')
+                                    ->hiddenLabel()
+                                    ->image()
+                                    ->imageEditor()
+                                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                                    ->maxSize(5120)
+                                    ->disk('public')
+                                    ->directory(GalleryImage::DIRECTORY)
+                                    ->visibility('public')
+                                    ->required(),
+                                Forms\Components\TextInput::make('caption')
+                                    ->helperText('Also read aloud to screen readers, e.g. "Skin fade with a hard part".')
+                                    ->maxLength(120),
+                            ]),
+                    ]),
+                Forms\Components\Section::make('FAQ')
+                    ->description('Your own policies: walk-ins, arriving late, parking, payment. Until you add one, the page shows general booking answers.')
+                    ->collapsible()
+                    ->schema([
+                        Forms\Components\Repeater::make('faqs')
+                            ->hiddenLabel()
+                            ->maxItems(self::MAX_FAQS)
+                            ->defaultItems(0)
+                            ->addActionLabel('Add question')
+                            ->collapsible()
+                            ->itemLabel(fn (array $state): ?string => $state['question'] ?? null)
+                            ->schema([
+                                Forms\Components\TextInput::make('question')
+                                    ->required()
+                                    ->maxLength(160),
+                                Forms\Components\Textarea::make('answer')
+                                    ->required()
+                                    ->rows(3)
+                                    ->maxLength(1000),
+                            ]),
+                    ]),
             ]);
     }
 
@@ -116,6 +171,18 @@ class TenantResource extends Resource
                 Tables\Columns\TextColumn::make('slug'),
                 Tables\Columns\TextColumn::make('timezone'),
                 Tables\Columns\TextColumn::make('currency'),
+                Tables\Columns\TextColumn::make('staff_members_count')
+                    ->label('Staff')
+                    ->counts('staffMembers')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('services_count')
+                    ->label('Services')
+                    ->counts('services')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('gallery_images_count')
+                    ->label('Photos')
+                    ->counts('galleryImages')
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

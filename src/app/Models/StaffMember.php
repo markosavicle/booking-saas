@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\AppointmentStatus;
 use App\Models\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -37,6 +38,18 @@ class StaffMember extends Model
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    /**
+     * Whether customers are still due in this barber's chair. Uses a `withExists` value
+     * named has_upcoming_appointments when the query loaded one.
+     */
+    public function hasUpcomingAppointments(): bool
+    {
+        return (bool) ($this->attributes['has_upcoming_appointments'] ?? $this->appointments()
+            ->whereIn('status', AppointmentStatus::blocking())
+            ->where('start_time', '>', now())
+            ->exists());
     }
 
     #[Scope]

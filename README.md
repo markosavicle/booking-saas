@@ -16,13 +16,16 @@ A multi-tenant appointment platform for barbershops. Every shop gets its own bra
 
 **For shops**
 - **Branded landing page:** tagline, about text, hero image, address with a directions link, tap-to-call phone, social links, opening hours and team.
+- **Gallery:** up to 12 captioned, reorderable photos with a keyboard-friendly lightbox. The section is hidden until a shop uploads one.
+- **FAQ:** the shop's own questions (walk-ins, lateness, parking…). Until it writes any, answers that hold for every shop (cancelling, reminders, choosing a barber) are shown. Also published as schema.org `FAQPage` data.
 - **Per-shop timezone and currency:** slots, "today" and prices are always in the shop's local terms.
 - **Admin panel (Filament):**
   - A dashboard showing today's appointments, upcoming revenue and customer count.
   - Appointments, services, staff, and shop profile management.
+  - Staff: services are limited to the barber's own shop. A barber with upcoming customers can only be deactivated, not deleted.
 
 **Platform**
-- **Global directory:** `/book` shows a shop picker and a sample of barbers from across the platform.
+- **Global directory:** `/book` lists every shop as a linked card (city, tagline, team size), plus the widget's shop picker and a sample of barbers from across the platform.
 - **Roles:** super admins manage every shop. Shop admins see only their own data.
 
 ## Tech stack
@@ -67,7 +70,7 @@ flowchart LR
 
 Single database, shared schema, with a `tenant_id` on every tenant-owned table.
 
-- **Automatic scoping:** the `BelongsToTenant` trait adds a global `TenantScope`, which limits a signed-in shop admin to their own tenant's rows. The same trait forces `tenant_id` on anything they create, so they can't write into another shop.
+- **Automatic scoping:** the `BelongsToTenant` trait adds a global `TenantScope`, which limits a signed-in shop admin to their own tenant's rows. The same trait forces `tenant_id` on anything they save (create or update), so they can't write into or move a record to another shop. In the panel the shop field is hidden from them entirely (`App\Filament\Forms\TenantSelect`).
 - **Explicit scoping where it matters:**
   - Public pages, the booking API and dashboard stats filter by tenant explicitly rather than relying on who is logged in.
   - Stats fail closed: a shop admin with no shop sees zeros, never platform totals.

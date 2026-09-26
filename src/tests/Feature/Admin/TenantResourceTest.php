@@ -8,6 +8,9 @@ use App\Filament\Resources\TenantResource;
 use App\Filament\Resources\TenantResource\Pages\CreateTenant;
 use App\Filament\Resources\TenantResource\Pages\EditTenant;
 use App\Filament\Resources\TenantResource\Pages\ListTenants;
+use App\Models\GalleryImage;
+use App\Models\Service;
+use App\Models\StaffMember;
 use App\Models\Tenant;
 use App\Models\User;
 use Filament\Forms\Components\Select;
@@ -120,5 +123,85 @@ class TenantResourceTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertSame('America/New_York', $this->shop->refresh()->timezone);
+    }
+
+    public function test_a_shop_admin_curates_their_gallery_and_removed_photos_leave_the_disk(): void
+    {
+        $this->actingAs(User::factory()->tenantAdmin($this->shop)->create());
+        $stale = GalleryImage::factory()->for($this->shop)->create(['path' => GalleryImage::DIRECTORY.'/stale.jpg']);
+        Storage::disk('public')->put($stale->path, 'jpg');
+
+        Livewire::test(EditTenant::class, ['record' => $this->shop->getRouteKey()])
+            ->set('data.galleryImages', [
+                'new-1' => ['path' => [], 'caption' => 'Skin fade'],
+                'new-2' => ['path' => [], 'caption' => 'Beard sculpt'],
+            ])
+            ->set('data.galleryImages.new-1.path.upload', UploadedFile::fake()->image('fade.png', 1200, 1200))
+            ->set('data.galleryImages.new-2.path.upload', UploadedFile::fake()->image('beard.png', 1200, 1200))
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $images = $this->shop->galleryImages()->get();
+        $this->assertSame(['Skin fade', 'Beard sculpt'], $images->pluck('caption')->all());
+        $this->assertSame([1, 2], $images->pluck('sort_order')->all());
+        $images->each(fn (GalleryImage $image) => Storage::disk('public')->assertExists($image->path));
+        $this->assertStringStartsWith(GalleryImage::DIRECTORY.'/', $images->first()->path);
+
+        $this->assertModelMissing($stale);
+        Storage::disk('public')->assertMissing($stale->path);
+    }
+
+    public function test_the_gallery_is_capped_and_only_takes_images(): void
+    {
+        $this->actingAs(User::factory()->tenantAdmin($this->shop)->create());
+
+        // Required photo, so each item's file slot is enough to trip the cap without uploading 13 files.
+        Livewire::test(EditTenant::class, ['record' => $this->shop->getRouteKey()])
+            ->set('data.galleryImages', collect(range(1, 13))->mapWithKeys(fn (int $i): array => [
+                "new-{$i}" => ['path' => [], 'caption' => null],
+            ])->all())
+            ->call('save')
+            ->assertHasFormErrors(['galleryImages']);
+
+        Livewire::test(EditTenant::class, ['record' => $this->shop->getRouteKey()])
+            ->set('data.galleryImages', ['new-1' => ['path' => [], 'caption' => null]])
+            ->set('data.galleryImages.new-1.path.upload', UploadedFile::fake()->create('menu.pdf', 10, 'application/pdf'))
+            ->call('save')
+            ->assertHasFormErrors(['galleryImages.new-1.path']);
+
+        $this->assertSame(0, $this->shop->galleryImages()->count());
+    }
+
+    public function test_a_shop_admin_can_publish_their_own_faq(): void
+    {
+        $this->actingAs(User::factory()->tenantAdmin($this->shop)->create());
+
+        Livewire::test(EditTenant::class, ['record' => $this->shop->getRouteKey()])
+            ->set('data.faqs', [
+                'a' => ['question' => 'Do you take walk-ins?', 'answer' => 'Weekdays before noon.'],
+                'b' => ['question' => '', 'answer' => 'Orphan answer'],
+            ])
+            ->call('save')
+            ->assertHasFormErrors(['faqs.b.question']);
+
+        Livewire::test(EditTenant::class, ['record' => $this->shop->getRouteKey()])
+            ->set('data.faqs', ['a' => ['question' => 'Do you take walk-ins?', 'answer' => 'Weekdays before noon.']])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame([['question' => 'Do you take walk-ins?', 'answer' => 'Weekdays before noon.']], $this->shop->refresh()->faqItems());
+    }
+
+    public function test_the_shop_list_counts_staff_and_services(): void
+    {
+        StaffMember::factory()->count(2)->for($this->shop)->create();
+        Service::factory()->count(3)->for($this->shop)->create();
+
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        Livewire::test(ListTenants::class)
+            ->assertTableColumnStateSet('staff_members_count', 2, $this->shop->getKey())
+            ->assertTableColumnStateSet('services_count', 3, $this->shop->getKey())
+            ->assertTableColumnStateSet('services_count', 0, $this->rival->getKey());
     }
 }
