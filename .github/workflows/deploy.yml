@@ -41,6 +41,12 @@ jobs:
             exit 1
           fi
 
+          # Without a key every request is a 500 ("No application encryption key has been specified").
+          if ! grep -q '^APP_KEY=base64:.' src/.env; then
+            echo "::error::APP_KEY is empty in $DEPLOY_PATH/src/.env. Run: docker compose exec app php artisan key:generate --force"
+            exit 1
+          fi
+
           # Build the PHP image with www-data remapped to the runner user, so every process
           # in the stack owns what it writes (see docker/php/Dockerfile).
           export HOST_UID="$(id -u)" HOST_GID="$(id -g)"
