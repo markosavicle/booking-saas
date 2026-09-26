@@ -13,7 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // PHP-FPM is only reachable from the nginx container, which strips client-sent
+        // X-Forwarded-* unless the request came through nginx-proxy-manager (docker/nginx/default.conf).
+        $middleware->trustProxies(
+            at: ['PRIVATE_SUBNETS'],
+            headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PROTO,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
