@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ServiceResource\Pages;
 use App\Filament\Resources\ServiceResource\RelationManagers;
 use App\Models\Service;
+use App\Models\Tenant;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -25,6 +26,8 @@ class ServiceResource extends Resource
             ->schema([
                 Forms\Components\Select::make('tenant_id')
                     ->relationship('tenant', 'name')
+                    ->default(fn (): ?int => auth()->user()?->tenant_id)
+                    ->live()
                     ->required(),
                 Forms\Components\TextInput::make('name')
                     ->required()
@@ -35,7 +38,8 @@ class ServiceResource extends Resource
                 Forms\Components\TextInput::make('price')
                     ->required()
                     ->numeric()
-                    ->prefix('$'),
+                    // Prices are in the shop's own currency, so the prefix follows the selected shop.
+                    ->prefix(fn (Forms\Get $get): ?string => Tenant::find($get('tenant_id'))?->currency),
             ]);
     }
 
@@ -52,7 +56,7 @@ class ServiceResource extends Resource
                     ->numeric()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('price')
-                    ->money()
+                    ->money(fn (Service $record): string => $record->tenant->currency)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()

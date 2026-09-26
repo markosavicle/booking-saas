@@ -90,7 +90,7 @@ Single database, shared schema, with a `tenant_id` on every tenant-owned table.
 | `scheduler` | `schedule:work` for reminders |
 | `mysql` | Database, with a named volume |
 | `redis` | Cache, queues and rate limits |
-| `mailpit` | Local e-mail inbox |
+| `mailpit` | Local e-mail inbox, persisted in a named volume |
 | `node` | Frontend tooling on demand (`tools` profile), runs as the host user |
 
 `CONTAINER_PREFIX` and the port variables in the root `.env` let dev and prod stacks run side by side on one host.

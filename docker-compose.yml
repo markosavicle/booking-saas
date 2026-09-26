@@ -90,6 +90,11 @@ services:
     image: axllent/mailpit
     container_name: ${CONTAINER_PREFIX:-booking}-mailpit
     restart: unless-stopped
+    environment:
+      # Without a database path Mailpit keeps messages in a temp file that dies with the container.
+      MP_DATABASE: /data/mailpit.db
+    volumes:
+      - booking-mailpit-data:/data
     ports:
       - '${MAILPIT_PORT:-8025}:8025'
     networks:
@@ -137,3 +142,4 @@ networks:
 
 volumes:
   booking-mysql-data:
+  booking-mailpit-data:
