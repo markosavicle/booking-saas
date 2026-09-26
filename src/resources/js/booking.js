@@ -399,15 +399,24 @@ export default function bookingWidget(initialSlug = null) {
             }
         },
 
+        /** Back to a blank wizard, e.g. for someone else to book. */
         restart() {
             clearInterval(this.resendTimer);
             Object.assign(this, {
+                // On the multi-shop page, start over at the shop picker too.
+                tenant: this.tenantLocked || this.tenants.length === 1 ? this.tenant : null,
                 service: null,
+                staffId: null,
+                date: null,
+                slots: [],
                 slot: null,
+                form: { name: '', phone: '', email: '' },
+                fieldErrors: {},
                 booking: null,
                 cancelUrl: null,
                 verification: null,
                 code: '',
+                resendIn: 0,
             });
             this.go('service');
         },
