@@ -20,6 +20,7 @@ final readonly class CreateBookingAction
 {
     public function __construct(
         private GetAvailableSlotsAction $availableSlots,
+        private ActiveBookingGuard $activeBookings,
     ) {}
 
     /**
@@ -27,7 +28,8 @@ final readonly class CreateBookingAction
      * derived from the service. When no staff member is requested, the least busy
      * free one is assigned.
      *
-     * @throws ValidationException When the time is not a bookable slot or the staff member is unqualified.
+     * @throws ValidationException When the time is not a bookable slot, the staff member is unqualified,
+     *                             or the customer already has an upcoming booking at this shop.
      * @throws BookingConflictException When the slot was taken concurrently.
      */
     public function execute(User $customer, Service $service, CarbonImmutable $start, ?StaffMember $staff = null): Appointment
@@ -36,6 +38,10 @@ final readonly class CreateBookingAction
         $slot = $this->bookableSlot($service, $start, $staff);
 
         $appointment = DB::transaction(function () use ($customer, $service, $slot, $staff, $localDay): Appointment {
+            // Lock the customer first so two pending codes for one phone can't both become bookings.
+            User::query()->whereKey($customer->id)->lockForUpdate()->first(['id']);
+            $this->activeBookings->ensureNoneFor($customer, $service->tenant_id);
+
             $candidateIds = $staff !== null
                 ? [$staff->id]
                 : $service->qualifiedStaff()->pluck('staff_members.id')->all();

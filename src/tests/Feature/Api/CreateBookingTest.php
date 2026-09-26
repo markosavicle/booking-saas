@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Api;
 
+use App\Actions\Booking\ActiveBookingGuard;
 use App\Enums\AppointmentStatus;
 use App\Models\Appointment;
 use App\Models\Service;
@@ -109,7 +110,17 @@ class CreateBookingTest extends BookingTestCase
         $this->book($this->anna, '09:30');
 
         $this->bookVia(['staff_member_id' => $this->anna->id])->assertCreated();
-        $this->bookVia(['staff_member_id' => $this->anna->id, 'start_time' => self::MONDAY.' 10:00'])->assertCreated();
+        // Another customer: one customer may only hold one upcoming booking per shop.
+        $this->bookVia(['staff_member_id' => $this->anna->id, 'start_time' => self::MONDAY.' 10:00'], User::factory()->create())->assertCreated();
+    }
+
+    public function test_a_customer_can_hold_only_one_upcoming_booking_per_shop(): void
+    {
+        $this->bookVia(['staff_member_id' => $this->anna->id])->assertCreated();
+
+        $this->bookVia(['staff_member_id' => $this->ben->id, 'start_time' => self::MONDAY.' 11:00'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['phone' => ActiveBookingGuard::MESSAGE]);
     }
 
     public function test_canceled_appointments_free_the_slot(): void

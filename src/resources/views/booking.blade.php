@@ -532,11 +532,12 @@
                                 </dl>
                             </div>
 
-                            <div class="mt-6 grid gap-3 sm:grid-cols-2">
-                                <button type="button" class="btn-gold tap" @click="restart()">Book another</button>
-                                <a class="btn-ghost tap" :href="cancelUrl">Cancel this booking</a>
-                            </div>
-                            <p class="mt-4 text-center text-xs text-ink-400">The cancel link is also in your SMS, so you can cancel any time before the appointment.</p>
+                            <button type="button" class="btn-gold tap mt-6 w-full" @click="restart()">Done</button>
+                            {{-- Deliberately low-key: a fresh booking shouldn't sit one tap away from being canceled. --}}
+                            <p class="mt-4 text-center text-xs text-ink-400">
+                                Plans changed? Use the link in your SMS, or
+                                <a class="underline decoration-ink-600 underline-offset-2 transition hover:text-gold-300 hover:decoration-gold-400" :href="cancelUrl">cancel this booking</a>.
+                            </p>
                         </div>
                     </template>
                 </div>

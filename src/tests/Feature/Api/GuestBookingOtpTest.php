@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Api;
 
+use App\Actions\Booking\ActiveBookingGuard;
 use App\Contracts\SmsSender;
 use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\User;
 use App\Notifications\AppointmentConfirmed;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -269,5 +271,56 @@ class GuestBookingOtpTest extends BookingTestCase
         $this->confirm($id, '12345')->assertJsonValidationErrors('code');
         $this->confirm($id, 'abcdef')->assertJsonValidationErrors('code');
         $this->postJson('/api/booking-requests/not-a-uuid/confirm', ['code' => '123456'])->assertNotFound();
+    }
+
+    public function test_a_phone_with_an_upcoming_booking_at_the_shop_gets_no_code(): void
+    {
+        $this->bookFor($this->customerWithPhone(), '10:00');
+
+        $this->requestCode(['phone' => '+381 60 123 4567'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['phone' => ActiveBookingGuard::MESSAGE]);
+
+        $this->assertSame([], $this->sms->sent);
+    }
+
+    public function test_past_canceled_and_other_shop_bookings_do_not_block(): void
+    {
+        $customer = $this->customerWithPhone();
+        $this->bookFor($customer, '07:00');                                          // earlier today, already past
+        $this->bookFor($customer, '10:00')->update(['status' => AppointmentStatus::Canceled]);
+        Appointment::factory()->for($customer, 'user')->at(CarbonImmutable::parse(self::MONDAY.' 10:00'))->create(); // another shop
+
+        $this->requestCode()->assertAccepted();
+    }
+
+    public function test_two_pending_codes_for_one_phone_cannot_both_become_bookings(): void
+    {
+        $first = $this->requestCode()->assertAccepted()->json('data.id');
+        $firstCode = $this->lastCode();
+        $second = $this->requestCode(['start_time' => self::MONDAY.' 10:00'])->assertAccepted()->json('data.id');
+        $secondCode = $this->lastCode();
+
+        $this->confirm($first, $firstCode)->assertCreated();
+        $this->confirm($second, $secondCode)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['phone' => ActiveBookingGuard::MESSAGE]);
+
+        $this->assertDatabaseCount('appointments', 1);
+    }
+
+    private function customerWithPhone(): User
+    {
+        return User::factory()->create(['phone' => self::PHONE]);
+    }
+
+    private function bookFor(User $customer, string $time): Appointment
+    {
+        return Appointment::factory()
+            ->forService($this->haircut)
+            ->forStaff($this->anna)
+            ->for($customer, 'user')
+            ->at(CarbonImmutable::parse(self::MONDAY.' '.$time))
+            ->create();
     }
 }
