@@ -66,10 +66,14 @@ CLOUDFLARE_TUNNEL_TOKEN=<token from step 1>
 APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://booking.example.com
-ASSET_URL=https://booking.example.com
 SESSION_SECURE_COOKIE=true
+BOOKING_DEMO_MODE=true   # public portfolio demo; see below
 LOG_LEVEL=warning
 ```
+
+Leave `ASSET_URL` unset. Laravel then builds page and asset links from the host the visitor used: the tunnel URL, a quick-tunnel URL or `localhost`, all at once, with no `.env` edits. Visitor-supplied `X-Forwarded-Host` is ignored.
+
+`APP_URL` is still used for links generated outside a web request, such as the cancel link in SMS/e-mail and reminders. Set it to your main public URL.
 
 Then lock both files down:
 
@@ -98,9 +102,11 @@ curl -sI https://booking.example.com/book | head -1   # HTTP/2 200
   - Change every password before sharing the link (`docker compose exec app php artisan tinker`, then `User::where('email', …)->first()->update(['password' => Hash::make('…')])`).
   - Or put `/admin` behind **Cloudflare Access**: Zero Trust → Access → Applications → Self-hosted, path `admin*`, e-mail one-time PIN. It's free for up to 50 users.
   - For recruiters, give out a separate shop-admin account rather than the super admin.
-- **SMS codes:** with `SMS_DRIVER=log`, visitors never receive their code, so they can't finish a booking.
-  - Twilio trial accounts only text numbers you have verified. That's enough for demoing on your own phone, but not for strangers.
-  - For a public portfolio demo, a clearly labelled "demo mode" that shows the code on screen is the practical fix. It's not built yet.
+- **SMS codes:** set `BOOKING_DEMO_MODE=true` for a public demo.
+  - The booking widget then shows the 6-digit code on screen, with a "Use this code" button.
+  - No SMS is ever sent, even if Twilio is configured: visitors type in made-up numbers that may belong to real people.
+  - Every public page and the admin panel carry an amber "Demo" banner explaining that on a live site the code arrives by text message.
+  - Expiry, attempt limits and rate limits work exactly as they do live.
 - **E-mail:** prod Mailpit keeps confirmations on the server, which is fine for a demo. For real delivery, set the `MAIL_*` variables to an SMTP provider's free tier.
 - **Cloudflare settings:**
   - Turn on SSL/TLS → **Always Use HTTPS**.
@@ -118,19 +124,28 @@ curl -sI https://booking.example.com/book | head -1   # HTTP/2 200
 
 ### Quick demo without a domain
 
-This gives you a temporary public link; it lasts only while the command runs:
+This gives you a temporary public link: a random `https://….trycloudflare.com` address. No account or domain is needed. It's managed by Compose and survives reboots and deploys:
 
 ```bash
-docker run --rm --network booking-prod_booking-net cloudflare/cloudflared:2026.9.3 \
-  tunnel --no-autoupdate --url http://webserver:8080
+cd ~/docker/production-booking-saas
+docker compose --profile quick-tunnel up -d quick-tunnel
+docker compose logs quick-tunnel 2>&1 | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -n1
 ```
 
-It prints a random `https://….trycloudflare.com` address. Assets and links follow `APP_URL`/`ASSET_URL`, so for the duration:
-1. Set both to that address.
-2. Run `php artisan optimize`.
-3. Change them back afterwards.
+- **No `.env` edits:** with `ASSET_URL` unset, nothing needs changing for a new URL, so skip `optimize`.
+- **The URL changes** every time the container is recreated or the server reboots. Run the `logs` line again to get the new one.
+- **Keep it across deploys:** put `COMPOSE_PROFILES=quick-tunnel` in the root `.env`, and the deploy keeps it running.
+- **Stop it:** `docker compose --profile quick-tunnel stop quick-tunnel`.
 
-Use this only as a stopgap: the URL changes every time.
+Cloudflare offers quick tunnels for testing only: there's no uptime guarantee and a cap on concurrent requests. They're fine for showing the app on your phone in a meeting, but not for a link on your CV.
+
+### A permanent URL without buying a domain
+
+| Option | URL | Needs | Trade-off |
+|---|---|---|---|
+| **Tailscale Funnel** (recommended) | `https://<machine>.<tailnet>.ts.net`, fixed | Free Tailscale account; no router changes; works behind CGNAT | A `ts.net` name instead of your own. Tailscale passes the visitor IP in `X-Forwarded-For`, so nginx needs its own trusted entry port. That's a small change, to set up and test once you have an auth key. |
+| **DuckDNS + port forwarding** | `https://<name>.duckdns.org`, fixed | Router forwards 80/443 to Nginx Proxy Manager; a public IPv4 (no CGNAT) | Exposes your home IP; NPM issues the Let's Encrypt certificate. |
+| **A cheap domain** | `https://booking.<yours>`, fixed | Roughly €2–10 a year | The named tunnel in option A: the most professional option, and already built. |
 
 ### Trade-offs
 

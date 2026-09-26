@@ -79,6 +79,21 @@ services:
     depends_on:
       - webserver
 
+  # Temporary public link with no account or domain: a random https://….trycloudflare.com that
+  # changes whenever this container restarts. For demos and phone testing, not a portfolio link.
+  #   docker compose --profile quick-tunnel up -d quick-tunnel
+  #   docker compose logs quick-tunnel | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com'
+  quick-tunnel:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: [quick-tunnel]
+    container_name: ${CONTAINER_PREFIX:-booking}-quick-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://webserver:8080
+    networks:
+      - booking-net
+    depends_on:
+      - webserver
+
   webserver:
     image: nginx:alpine
     container_name: ${CONTAINER_PREFIX:-booking}-web

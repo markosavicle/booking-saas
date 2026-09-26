@@ -12,6 +12,9 @@
     @vite(['resources/css/app.css'])
 </head>
 <body class="min-h-full bg-ink-950 font-sans text-ink-300 antialiased">
+@if (config('booking.demo_mode'))
+    @include('partials.demo-banner')
+@endif
 <div class="pointer-events-none fixed inset-x-0 top-0 h-[28rem] bg-[radial-gradient(ellipse_at_top,rgba(214,178,94,0.14),transparent_65%)]" aria-hidden="true"></div>
 
 <main class="relative mx-auto flex min-h-screen w-full max-w-lg flex-col px-4 pt-10 pb-10 sm:pt-16">
