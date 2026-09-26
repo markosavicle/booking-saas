@@ -13,6 +13,7 @@ A multi-tenant appointment platform for barbershops. Every shop gets its own bra
   - The slot is re-checked before any SMS is spent.
 - **Self-service cancellation:** a private, unguessable link in the confirmation SMS/e-mail. No login required.
 - **Reminders:** automatic SMS and e-mail reminders before each appointment (24 hours by default).
+- **Demo mode** (`BOOKING_DEMO_MODE=true`): for a public portfolio demo. The booking code is shown on screen instead of texted, no SMS is ever sent, and every page carries a "Demo" banner.
 
 **For shops**
 - **Branded landing page:** tagline, about text, hero image, address with a directions link, tap-to-call phone, social links, opening hours and team.
@@ -97,6 +98,7 @@ Single database, shared schema, with a `tenant_id` on every tenant-owned table.
 | `node` | Frontend tooling on demand (`tools` profile), runs as the host user |
 | `adminer` | Database browser on demand (`debug` profile), bound to `127.0.0.1` only |
 | `cloudflared` | Cloudflare Tunnel for a public URL (`tunnel` profile, prod only; see [docs/deployment.md](docs/deployment.md)) |
+| `quick-tunnel` | Temporary `trycloudflare.com` link for demos, no domain needed (`quick-tunnel` profile) |
 
 `CONTAINER_PREFIX` and the port variables in the root `.env` let dev and prod stacks run side by side on one host.
 
