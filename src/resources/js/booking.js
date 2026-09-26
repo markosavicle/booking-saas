@@ -7,6 +7,13 @@
 const DAYS_SHOWN = 14;
 const RESEND_COOLDOWN_SECONDS = 60;
 
+/** Time-of-day buckets for the slot grid, by the slot's local start hour. */
+const SLOT_PERIODS = [
+    { key: 'morning', label: 'Morning', until: 12 },
+    { key: 'afternoon', label: 'Afternoon', until: 17 },
+    { key: 'evening', label: 'Evening', until: 24 },
+];
+
 export const STEPS = [
     { key: 'service', label: 'Service' },
     { key: 'time', label: 'Time' },
@@ -88,6 +95,7 @@ export default function bookingWidget(initialSlug = null) {
 
         tenants: [],
         tenant: null,
+        tenantLocked: initialSlug !== null, // a shop's own landing page never switches shops
         service: null,
         staffId: null,
         date: null,
@@ -140,7 +148,11 @@ export default function bookingWidget(initialSlug = null) {
             this.error = null;
             this.notice = null;
             this.step = step;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            // The widget sits mid-page: bring its top back into view, but never yank the page down to it.
+            if (this.$root.getBoundingClientRect().top < 0) {
+                this.$root.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         },
 
         // Step 1: shop and service
@@ -199,6 +211,19 @@ export default function bookingWidget(initialSlug = null) {
 
         get availableSlots() {
             return this.slots.filter((slot) => slot.available);
+        },
+
+        get slotGroups() {
+            return SLOT_PERIODS
+                .map((period, index) => ({
+                    ...period,
+                    slots: this.availableSlots.filter((slot) => {
+                        const hour = Number(slot.start_time.slice(11, 13));
+
+                        return hour < period.until && hour >= (SLOT_PERIODS[index - 1]?.until ?? 0);
+                    }),
+                }))
+                .filter((period) => period.slots.length);
         },
 
         async selectDate(isoDate) {

@@ -10,11 +10,20 @@ use Illuminate\Contracts\View\View;
 class BookingPageController extends Controller
 {
     /**
-     * Shell for the booking widget; all data is loaded client-side from the API.
-     * An optional tenant slug deep-links straight to that shop.
+     * Shop landing page around the booking widget. The shop's public profile (hours, team)
+     * is server-rendered; the widget itself still loads its data client-side from the API.
+     * Without a slug the page is a neutral shell over the widget's shop picker.
      */
     public function __invoke(?Tenant $tenant = null): View
     {
-        return view('booking', ['initialSlug' => $tenant?->slug]);
+        $tenant?->load([
+            'businessHours',
+            'staffMembers' => fn ($query) => $query->active()->orderBy('name'),
+        ]);
+
+        return view('booking', [
+            'tenant' => $tenant,
+            'initialSlug' => $tenant?->slug,
+        ]);
     }
 }

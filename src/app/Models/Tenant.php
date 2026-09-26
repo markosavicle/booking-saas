@@ -9,6 +9,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class Tenant extends Model
@@ -94,5 +95,17 @@ class Tenant extends Model
         }
 
         return $this->businessHours()->where('day_of_week', $date->dayOfWeek)->first();
+    }
+
+    /**
+     * The week Monday-first for display, keyed by day_of_week (0 = Sunday); null marks a closed day.
+     *
+     * @return Collection<int, BusinessHour|null>
+     */
+    public function weeklyHours(): Collection
+    {
+        $hours = $this->businessHours->keyBy('day_of_week');
+
+        return collect([1, 2, 3, 4, 5, 6, 0])->mapWithKeys(fn (int $day): array => [$day => $hours->get($day)]);
     }
 }
