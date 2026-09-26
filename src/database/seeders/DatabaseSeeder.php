@@ -12,14 +12,54 @@ use App\Models\Tenant;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
+    /**
+     * `hero` names a stock photo in database/seeders/images; null exercises the bundled default.
+     */
     private const array TENANTS = [
-        ['name' => 'Belgrade Central Cuts', 'city' => 'Belgrade'],
-        ['name' => 'Novi Sad Fade Studio', 'city' => 'Novi Sad'],
-        ['name' => 'Niš Classic Barbers', 'city' => 'Niš'],
+        [
+            'name' => 'Belgrade Central Cuts',
+            'city' => 'Belgrade',
+            'hero' => 'barbershop-interior.jpg',
+            'profile' => [
+                'tagline' => 'Straight-razor shaves and sharp fades a block from Republic Square.',
+                'about_text' => "Exposed brick, leather chairs and a record player that never stops. We've been cutting Dorćol's hair since 2014, and every appointment still starts with a proper consultation.\n\nCome in early for an espresso on the house.",
+                'address' => "Kneza Mihaila 12\n11000 Belgrade, Serbia",
+                'phone' => '+381 11 328 4471',
+                'social_instagram' => 'https://www.instagram.com/belgradecentralcuts',
+                'social_facebook' => 'https://www.facebook.com/belgradecentralcuts',
+            ],
+        ],
+        [
+            'name' => 'Novi Sad Fade Studio',
+            'city' => 'Novi Sad',
+            'hero' => 'barbershop-fade.jpg',
+            'profile' => [
+                'tagline' => 'Skin fades, textured crops and beard work for the Danube crowd.',
+                'about_text' => "A small, loud studio off Zmaj Jovina where fades are measured in millimetres. Our barbers train every month so the latest styles reach Novi Sad before they're everywhere.\n\nWalk-ins welcome when the chairs are free; booking guarantees your slot.",
+                'address' => "Zmaj Jovina 8\n21000 Novi Sad, Serbia",
+                'phone' => '+381 21 661 2093',
+                'social_instagram' => 'https://www.instagram.com/novisadfadestudio',
+                'social_facebook' => null,
+            ],
+        ],
+        [
+            'name' => 'Niš Classic Barbers',
+            'city' => 'Niš',
+            'hero' => null,
+            'profile' => [
+                'tagline' => 'Old-school cuts and hot towel shaves in the heart of Niš.',
+                'about_text' => 'Three generations of barbers, one chair at a time. Classic scissor cuts, hot towels and a neckline you can set your watch by.',
+                'address' => "Obrenovićeva 21\n18000 Niš, Serbia",
+                'phone' => '+381 18 452 118',
+                'social_instagram' => null,
+                'social_facebook' => 'https://www.facebook.com/nisclassicbarbers',
+            ],
+        ],
     ];
 
     private const array SERVICES = [
@@ -55,6 +95,9 @@ class DatabaseSeeder extends Seeder
             $tenant = Tenant::factory()->withStandardHours('09:00', '21:00')->create([
                 'name' => $data['name'],
                 'timezone' => 'Europe/Belgrade',
+                'currency' => 'EUR',
+                'hero_image_path' => $data['hero'] ? $this->publishHeroImage($data['hero']) : null,
+                ...$data['profile'],
             ]);
 
             User::factory()->tenantAdmin($tenant)->create([
@@ -92,6 +135,17 @@ class DatabaseSeeder extends Seeder
                 ]);
             }
         }
+    }
+
+    /**
+     * Copies a bundled stock photo onto the public disk, exactly where an admin upload would land.
+     */
+    private function publishHeroImage(string $filename): string
+    {
+        $path = Tenant::HERO_DIRECTORY.'/'.$filename;
+        Storage::disk('public')->put($path, file_get_contents(database_path("seeders/images/{$filename}")));
+
+        return $path;
     }
 
     private function nextWorkingDay(): CarbonImmutable

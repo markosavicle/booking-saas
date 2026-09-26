@@ -59,6 +59,7 @@ jobs:
             -v "$DEPLOY_PATH/src:/app" -w /app node:22-alpine \
             sh -c 'npm ci --no-audit --no-fund && npm run build'
 
+          artisan storage:link
           artisan migrate --force
           artisan optimize
           artisan filament:optimize

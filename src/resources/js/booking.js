@@ -85,6 +85,39 @@ function describeDate(isoDate) {
     };
 }
 
+// Grapheme-aware so "Niš" or a decomposed "š" never splits mid-character.
+const graphemes = (text) => typeof Intl.Segmenter === 'function'
+    ? Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), (part) => part.segment)
+    : Array.from(text);
+
+/** "Niš Classic Barbers" → "NC", "Niš" → "NI"; punctuation-only words like "&" are skipped. */
+export function initials(name) {
+    const words = String(name ?? '').split(/\s+/).map((word) => word.replace(/[^\p{L}\p{M}\p{N}]/gu, '')).filter(Boolean);
+    const letters = words.length === 1 ? graphemes(words[0]).slice(0, 2) : words.slice(0, 2).map((word) => graphemes(word)[0]);
+
+    return letters.join('').toLocaleUpperCase();
+}
+
+const priceFormats = new Map();
+
+/** Localised currency string, dropping ".00" on whole amounts: "€25", "RSD 1,500", "€12.50". */
+export function formatPrice(value, currency = 'EUR') {
+    const amount = Number(value);
+    const fractionDigits = Number.isInteger(amount) ? 0 : 2;
+    const key = `${currency}:${fractionDigits}`;
+
+    if (!priceFormats.has(key)) {
+        priceFormats.set(key, new Intl.NumberFormat(document.documentElement.lang || undefined, {
+            style: 'currency',
+            currency,
+            minimumFractionDigits: fractionDigits,
+            maximumFractionDigits: fractionDigits,
+        }));
+    }
+
+    return priceFormats.get(key).format(amount);
+}
+
 export default function bookingWidget(initialSlug = null) {
     return {
         steps: STEPS,
@@ -392,13 +425,11 @@ export default function bookingWidget(initialSlug = null) {
         },
 
         initials(name) {
-            return name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+            return initials(name);
         },
 
         price(value) {
-            const amount = Number(value);
-
-            return Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+            return formatPrice(value, this.tenant?.currency);
         },
     };
 }
