@@ -23,6 +23,7 @@ class Appointment extends Model
         'service_id',
         'staff_member_id',
         'user_id',
+        'email',
         'start_time',
         'end_time',
         'status',

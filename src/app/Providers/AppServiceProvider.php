@@ -48,7 +48,7 @@ class AppServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
         // Every hit sends a paid SMS: cap bursts and totals per sender IP and per target phone.
-        RateLimiter::for('booking-otp', function (Request $request): array {
+        $this->limiter('booking-otp', function (Request $request): array {
             $phone = PhoneNumber::normalize($request->input('phone'));
 
             return [
@@ -60,10 +60,23 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Guesses per code are capped by the broker; this caps guessing across codes.
-        RateLimiter::for('booking-confirm', fn (Request $request): Limit => Limit::perMinute(10)->by($request->ip()));
+        $this->limiter('booking-confirm', fn (Request $request): Limit => Limit::perMinute(10)->by($request->ip()));
 
-        RateLimiter::for('bookings', fn (Request $request): Limit => Limit::perMinute(10)->by((string) $request->user()?->id ?: $request->ip()));
+        $this->limiter('bookings', fn (Request $request): Limit => Limit::perMinute(10)->by((string) $request->user()?->id ?: $request->ip()));
 
-        RateLimiter::for('booking-cancel', fn (Request $request): Limit => Limit::perMinute(20)->by($request->ip()));
+        $this->limiter('booking-cancel', fn (Request $request): Limit => Limit::perMinute(20)->by($request->ip()));
+    }
+
+    /**
+     * Registers a named limiter that is switched off in the local environment, so the booking
+     * flow can be exercised repeatedly. Checked per request; every other environment is limited.
+     *
+     * @param  \Closure(Request): (Limit|list<Limit>)  $limits
+     */
+    private function limiter(string $name, \Closure $limits): void
+    {
+        RateLimiter::for($name, fn (Request $request): Limit|array => $this->app->environment('local')
+            ? Limit::none()
+            : $limits($request));
     }
 }

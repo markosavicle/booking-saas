@@ -244,6 +244,41 @@ class GuestBookingOtpTest extends BookingTestCase
         $this->assertNotSame($other->id, Appointment::sole()->user_id);
     }
 
+    public function test_a_shared_email_gets_the_confirmation_for_every_phone_that_books_with_it(): void
+    {
+        Notification::fake();
+
+        $first = $this->requestCode()->json('data.id');
+        $this->confirm($first, $this->lastCode())->assertCreated();
+        $this->post(Appointment::sole()->cancelUrl())->assertRedirect();
+
+        $second = $this->requestCode(['phone' => '+381609999999', 'start_time' => self::MONDAY.' 10:00'])->json('data.id');
+        $this->confirm($second, $this->lastCode())->assertCreated();
+
+        [$original, $newcomer] = User::query()->whereNotNull('phone')->orderBy('id')->get()->all();
+        $this->assertNull($newcomer->email, 'The address stays with the account that claimed it first.');
+
+        foreach ([$original, $newcomer] as $customer) {
+            Notification::assertSentTo($customer, AppointmentConfirmed::class, function (AppointmentConfirmed $notification, array $channels) use ($customer): bool {
+                return in_array('mail', $channels, true)
+                    && $customer->routeNotificationFor('mail', $notification) === 'marko@example.com';
+            });
+        }
+    }
+
+    public function test_a_bookings_own_email_wins_over_the_accounts(): void
+    {
+        Notification::fake();
+        $this->customerWithPhone()->update(['email' => 'old@example.com']);
+
+        $id = $this->requestCode(['email' => 'new@example.com'])->json('data.id');
+        $this->confirm($id, $this->lastCode())->assertCreated();
+
+        Notification::assertSentTo(User::query()->where('phone', self::PHONE)->sole(), AppointmentConfirmed::class,
+            fn (AppointmentConfirmed $notification, array $channels, User $customer): bool => $customer->routeNotificationFor('mail', $notification) === 'new@example.com');
+        $this->assertSame('old@example.com', User::query()->where('phone', self::PHONE)->sole()->email);
+    }
+
     public function test_staff_accounts_keep_their_profile_when_they_book_as_a_guest(): void
     {
         $admin = User::factory()->tenantAdmin($this->tenant)->create(['phone' => self::PHONE, 'name' => 'Shop Owner']);

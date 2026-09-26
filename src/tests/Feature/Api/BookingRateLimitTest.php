@@ -43,6 +43,22 @@ class BookingRateLimitTest extends BookingTestCase
         $this->assertCount(4, $this->sms->sent);
     }
 
+    public function test_limits_are_switched_off_in_the_local_environment_only(): void
+    {
+        $this->app['env'] = 'local';
+
+        foreach (range(1, 25) as $i) {
+            $this->requestCode('+381601111111')->assertAccepted();
+        }
+
+        $this->app['env'] = 'production';
+
+        foreach (range(1, 3) as $i) {
+            $this->requestCode('+381602222222')->assertAccepted();
+        }
+        $this->requestCode('+381602222222')->assertTooManyRequests();
+    }
+
     public function test_one_phone_can_receive_three_codes_per_minute_whatever_the_ip(): void
     {
         foreach (range(1, 3) as $i) {

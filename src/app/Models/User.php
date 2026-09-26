@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\UserRole;
+use App\Notifications\AppointmentNotification;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Notifications\Notification;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements FilamentUser
@@ -51,6 +53,18 @@ class User extends Authenticatable implements FilamentUser
     public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
+    }
+
+    /**
+     * Appointment mail goes to the address given for that booking, falling back to the account's.
+     */
+    public function routeNotificationForMail(?Notification $notification = null): ?string
+    {
+        if ($notification instanceof AppointmentNotification) {
+            return $notification->appointment->email ?? $this->email;
+        }
+
+        return $this->email;
     }
 
     /**
