@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Forms\TenantSelect;
 use App\Filament\Resources\ServiceResource\Pages;
-use App\Filament\Resources\ServiceResource\RelationManagers;
 use App\Models\Service;
 use App\Models\Tenant;
 use Filament\Forms;
@@ -11,8 +11,6 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class ServiceResource extends Resource
 {
@@ -24,11 +22,7 @@ class ServiceResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Select::make('tenant_id')
-                    ->relationship('tenant', 'name')
-                    ->default(fn (): ?int => auth()->user()?->tenant_id)
-                    ->live()
-                    ->required(),
+                TenantSelect::make(),
                 Forms\Components\TextInput::make('name')
                     ->required()
                     ->maxLength(255),

@@ -70,6 +70,16 @@ class TenantScopeTest extends TestCase
         $this->assertSame($this->tenantA->id, $service->tenant_id);
     }
 
+    public function test_tenant_admin_cannot_move_a_record_into_another_tenant(): void
+    {
+        $this->actingAs(User::factory()->tenantAdmin($this->tenantA)->create());
+        $service = Service::firstOrFail();
+
+        $service->update(['tenant_id' => $this->tenantB->id]);
+
+        $this->assertSame($this->tenantA->id, $service->refresh()->tenant_id);
+    }
+
     public function test_customer_booking_keeps_the_service_tenant(): void
     {
         $customer = User::factory()->create();

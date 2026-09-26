@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\GalleryImage;
 use App\Models\StaffMember;
 use App\Models\Tenant;
 use App\Models\User;
@@ -108,7 +109,7 @@ class BookingPageTest extends BookingTestCase
 
         $this->assertSame(6, substr_count($response->getContent(), 'after:absolute'));
         $staffQueries = collect(DB::getQueryLog())->pluck('query')
-            ->filter(fn (string $sql): bool => str_contains($sql, 'from "staff_members"') || str_contains($sql, 'from "tenants"'));
+            ->filter(fn (string $sql): bool => str_starts_with($sql, 'select * from "staff_members"') || str_contains($sql, 'from "tenants" where "tenants"."id" in'));
         $this->assertCount(2, $staffQueries, 'Expected one staff query plus one eager-loaded tenants query.');
     }
 
@@ -127,5 +128,97 @@ class BookingPageTest extends BookingTestCase
     public function test_unknown_shops_return_404(): void
     {
         $this->get('/book/nope')->assertNotFound();
+    }
+
+    public function test_the_directory_links_every_shop_to_its_own_page(): void
+    {
+        $rival = Tenant::factory()->create([
+            'name' => 'Novi Sad Fade Studio',
+            'tagline' => 'Fades for the Danube crowd.',
+            'address' => "Zmaj Jovina 8\n21000 Novi Sad",
+        ]);
+        StaffMember::factory()->for($rival)->count(2)->create();
+        StaffMember::factory()->for($rival)->inactive()->create();
+        DB::enableQueryLog();
+
+        $response = $this->get('/book')
+            ->assertOk()
+            ->assertSee('id="shops"', false)
+            ->assertSeeInOrder(['id="shops"', '21000 Novi Sad', $rival->name, 'Fades for the Danube crowd.', '2 barbers', 'id="book"'], false)
+            ->assertSee('href="'.route('booking', $rival).'"', false)
+            ->assertSee('href="'.route('booking', $this->tenant).'"', false);
+
+        $directoryQueries = collect(DB::getQueryLog())->pluck('query')
+            ->filter(fn (string $sql): bool => str_contains($sql, 'as "staff_members_count"'));
+        $this->assertCount(1, $directoryQueries, 'Staff counts must come from one withCount query, not one per shop.');
+
+        // A shop's own page is about that shop only.
+        $this->get("/book/{$rival->slug}")->assertOk()->assertDontSee('id="shops"', false);
+    }
+
+    public function test_a_shop_page_shows_its_gallery_in_order_and_hides_it_when_empty(): void
+    {
+        $this->get("/book/{$this->tenant->slug}")->assertOk()->assertDontSee('id="gallery"', false);
+
+        $second = GalleryImage::factory()->for($this->tenant)->create(['caption' => 'The shop floor', 'sort_order' => 2]);
+        $first = GalleryImage::factory()->for($this->tenant)->create(['caption' => 'Skin fade', 'sort_order' => 1]);
+        GalleryImage::factory()->create(['caption' => 'Someone else\'s cut']);
+
+        $this->get("/book/{$this->tenant->slug}")
+            ->assertOk()
+            ->assertSee('href="#gallery"', false)
+            ->assertSeeInOrder(['id="gallery"', $first->url(), 'alt="Skin fade"', $second->url(), 'alt="The shop floor"', 'id="team"'], false)
+            ->assertDontSee('Someone else&#039;s cut', false);
+    }
+
+    public function test_the_faq_shows_platform_answers_until_a_shop_writes_its_own(): void
+    {
+        config(['booking.reminder_lead_hours' => 12]);
+
+        $this->get("/book/{$this->tenant->slug}")
+            ->assertOk()
+            ->assertSee('id="faq"', false)
+            ->assertSee('How do I cancel or reschedule?')
+            ->assertSee('about 12 hours before')
+            ->assertSee('"@type":"FAQPage"', false);
+
+        $this->get('/book')->assertOk()->assertSee('How do I cancel or reschedule?');
+
+        $this->tenant->update(['faqs' => [
+            ['question' => 'Is there parking?', 'answer' => 'Free behind the shop.'],
+            ['question' => 'Half-filled', 'answer' => ''],
+        ]]);
+
+        $this->get("/book/{$this->tenant->slug}")
+            ->assertOk()
+            ->assertSee('Is there parking?')
+            ->assertSee('Free behind the shop.')
+            ->assertDontSee('Half-filled')
+            ->assertDontSee('How do I cancel or reschedule?');
+    }
+
+    public function test_faq_content_is_escaped_including_inside_the_structured_data(): void
+    {
+        $this->tenant->update(['faqs' => [
+            ['question' => '<b>Bold?</b>', 'answer' => '</script><script>alert(1)</script>'],
+        ]]);
+
+        $html = $this->get("/book/{$this->tenant->slug}")->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('<b>Bold?</b>', $html);
+        $this->assertStringNotContainsString('<script>alert(1)</script>', $html);
+    }
+
+    public function test_a_shop_admin_browsing_a_rival_shop_sees_its_whole_page(): void
+    {
+        $rival = Tenant::factory()->create();
+        StaffMember::factory()->for($rival)->create(['name' => 'Rival Barber']);
+        GalleryImage::factory()->for($rival)->create(['caption' => 'Rival fade']);
+
+        $this->actingAs(User::factory()->tenantAdmin($this->tenant)->create())
+            ->get("/book/{$rival->slug}")
+            ->assertOk()
+            ->assertSee('Rival Barber')
+            ->assertSee('Rival fade');
     }
 }

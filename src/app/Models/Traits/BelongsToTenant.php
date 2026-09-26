@@ -16,8 +16,9 @@ trait BelongsToTenant
     {
         static::addGlobalScope(new TenantScope);
 
-        // A tenant admin can only ever create records inside their own tenant.
-        static::creating(function ($model): void {
+        // A tenant admin can only ever write records inside their own tenant, on create and on
+        // update alike, so an edited form can't move a record into another shop.
+        static::saving(function ($model): void {
             $user = Auth::user();
 
             if ($user instanceof User && $user->isTenantAdmin()) {

@@ -48,9 +48,16 @@
         </a>
         <div class="flex items-center gap-1 sm:gap-6">
             <a href="#about" class="hidden text-sm text-ink-300 transition hover:text-gold-300 sm:block">About</a>
+            @if ($shops->isNotEmpty())
+                <a href="#shops" class="hidden text-sm text-ink-300 transition hover:text-gold-300 sm:block">Shops</a>
+            @endif
+            @if ($gallery->isNotEmpty())
+                <a href="#gallery" class="hidden text-sm text-ink-300 transition hover:text-gold-300 sm:block">Gallery</a>
+            @endif
             @if ($staff->isNotEmpty())
                 <a href="#team" class="hidden text-sm text-ink-300 transition hover:text-gold-300 sm:block">Team</a>
             @endif
+            <a href="#faq" class="hidden text-sm text-ink-300 transition hover:text-gold-300 sm:block">FAQ</a>
             <a href="#book" class="tap rounded-full bg-gradient-to-b from-gold-300 to-gold-500 px-4 py-2 text-xs font-semibold tracking-wider text-ink-950 uppercase">Book</a>
         </div>
     </nav>
@@ -175,6 +182,10 @@
             </div>
         @endif
     </section>
+
+    @if ($shops->isNotEmpty())
+        @include('booking.shops')
+    @endif
 
     {{-- Booking --}}
     <section id="book" class="relative border-y border-ink-800 bg-ink-900/40 py-16 sm:py-24">
@@ -545,6 +556,10 @@
         </div>
     </section>
 
+    @if ($gallery->isNotEmpty())
+        @include('booking.gallery')
+    @endif
+
     {{-- Team --}}
     @if ($staff->isNotEmpty())
         <section id="team" class="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
@@ -582,6 +597,8 @@
             </div>
         </section>
     @endif
+
+    @include('booking.faq')
 </main>
 
 {{-- Footer --}}
