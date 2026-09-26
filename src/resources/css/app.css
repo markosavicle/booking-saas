@@ -4,6 +4,58 @@
 @source '../../storage/framework/views/*.php';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: var(--font-inter), 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-display: var(--font-playfair-display), ui-serif, Georgia, serif;
+
+    /* Barbershop palette: near-black ink with brushed-gold accents. */
+    --color-ink-950: #09090a;
+    --color-ink-900: #111113;
+    --color-ink-800: #19191c;
+    --color-ink-700: #242428;
+    --color-ink-600: #34343a;
+    --color-ink-400: #8a8a93;
+    --color-ink-300: #b4b4bb;
+    --color-gold-200: #f1e2b8;
+    --color-gold-300: #e6cb86;
+    --color-gold-400: #d6b25e;
+    --color-gold-500: #c49a3c;
+    --color-gold-600: #9f7a27;
+}
+
+/* Reusable pieces; @utility (not @layer) so they compose with @apply and variants. */
+@utility gold-text {
+    @apply bg-gradient-to-r from-gold-200 via-gold-400 to-gold-500 bg-clip-text text-transparent;
+}
+
+@utility card {
+    @apply rounded-2xl border border-ink-700 bg-ink-900/80 transition duration-200;
+}
+
+@utility card-interactive {
+    @apply card cursor-pointer hover:-translate-y-0.5 hover:border-gold-500/60 hover:bg-ink-800 focus-visible:border-gold-400 focus-visible:outline-none;
+}
+
+@utility btn-gold {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-gold-300 to-gold-500 px-5 py-3.5 text-sm font-semibold tracking-wide text-ink-950 uppercase shadow-lg shadow-gold-500/10 transition hover:from-gold-200 hover:to-gold-400 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-ink-600 px-5 py-3.5 text-sm font-medium text-ink-300 transition hover:border-gold-500/60 hover:text-gold-200 focus-visible:border-gold-400 focus-visible:outline-none;
+}
+
+@utility field {
+    @apply block w-full rounded-xl border border-ink-600 bg-ink-950 px-4 py-3.5 text-base text-white placeholder:text-ink-400 transition focus:border-gold-400 focus:ring-1 focus:ring-gold-400 focus:outline-none;
+}
+
+@utility eyebrow {
+    @apply text-[0.7rem] font-semibold tracking-[0.25em] text-gold-400 uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

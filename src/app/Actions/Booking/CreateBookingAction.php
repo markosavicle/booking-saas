@@ -33,15 +33,7 @@ final readonly class CreateBookingAction
     public function execute(User $customer, Service $service, CarbonImmutable $start, ?StaffMember $staff = null): Appointment
     {
         $localDay = $start->setTimezone($service->tenant->timezone)->startOfDay();
-
-        $slot = $this->availableSlots->execute($service, $localDay, $staff)
-            ->first(fn (Slot $slot): bool => $slot->start->equalTo($start));
-
-        if ($slot === null) {
-            throw ValidationException::withMessages([
-                'start_time' => 'The selected time is outside business hours or not a bookable slot.',
-            ]);
-        }
+        $slot = $this->bookableSlot($service, $start, $staff);
 
         $appointment = DB::transaction(function () use ($customer, $service, $slot, $staff, $localDay): Appointment {
             $candidateIds = $staff !== null
@@ -71,6 +63,22 @@ final readonly class CreateBookingAction
         $customer->notify(new AppointmentConfirmed($appointment));
 
         return $appointment->load(['tenant', 'service', 'staffMember']);
+    }
+
+    /**
+     * The free slot starting at $start. Checked again under lock when booking.
+     *
+     * @throws ValidationException
+     */
+    public function bookableSlot(Service $service, CarbonImmutable $start, ?StaffMember $staff = null): Slot
+    {
+        $localDay = $start->setTimezone($service->tenant->timezone)->startOfDay();
+
+        return $this->availableSlots->execute($service, $localDay, $staff)
+            ->first(fn (Slot $slot): bool => $slot->start->equalTo($start))
+            ?? throw ValidationException::withMessages([
+                'start_time' => 'The selected time is outside business hours or not a bookable slot.',
+            ]);
     }
 
     private function withinReminderWindow(Slot $slot): bool

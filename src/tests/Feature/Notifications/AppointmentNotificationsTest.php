@@ -56,7 +56,7 @@ class AppointmentNotificationsTest extends TestCase
             ->forService($service)
             ->forStaff($staff)
             ->at(CarbonImmutable::parse('2026-10-01 12:30'))
-            ->create(['user_id' => $this->customer->id]);
+            ->create(['user_id' => $this->customer->id, 'cancel_token' => 'the-cancel-token']);
     }
 
     /**
@@ -68,8 +68,8 @@ class AppointmentNotificationsTest extends TestCase
             'confirmation' => [
                 AppointmentConfirmed::class,
                 'Booking confirmed - Acme Salon',
-                ['Hello Jane Doe', 'is confirmed', 'Service: Haircut', 'With: Anna', 'When: Thursday, October 1, 2026 at 14:30 CEST'],
-                'Acme Salon: your Haircut is confirmed for Thursday, October 1, 2026 at 14:30 CEST.',
+                ['Hello Jane Doe', 'is confirmed', 'Service: Haircut', 'With: Anna', 'When: Thursday, October 1, 2026 at 14:30 CEST', 'Cancel booking', '/cancel/the-cancel-token'],
+                'Acme Salon: your Haircut is confirmed for Thursday, October 1, 2026 at 14:30 CEST. Cancel: {cancel_url}',
             ],
             'cancellation' => [
                 AppointmentCanceled::class,
@@ -80,8 +80,8 @@ class AppointmentNotificationsTest extends TestCase
             'reminder' => [
                 AppointmentReminder::class,
                 'Reminder: your appointment at Acme Salon',
-                ['Hello Jane Doe', 'reminder of your upcoming appointment', 'Service: Haircut', 'With: Anna', 'When: Thursday, October 1, 2026 at 14:30 CEST'],
-                'Reminder from Acme Salon: Haircut on Thursday, October 1, 2026 at 14:30 CEST.',
+                ['Hello Jane Doe', 'reminder of your upcoming appointment', 'Service: Haircut', 'With: Anna', 'When: Thursday, October 1, 2026 at 14:30 CEST', 'Cancel booking', '/cancel/the-cancel-token'],
+                "Reminder from Acme Salon: Haircut on Thursday, October 1, 2026 at 14:30 CEST. Can't make it? {cancel_url}",
             ],
         ];
     }
@@ -109,7 +109,7 @@ class AppointmentNotificationsTest extends TestCase
     #[DataProvider('notifications')]
     public function test_sms_text_contains_the_appointment_details(string $class, string $subject, array $expectedLines, string $sms): void
     {
-        $this->assertSame($sms, (new $class($this->appointment))->toSms($this->customer));
+        $this->assertSame($this->withCancelUrl($sms), (new $class($this->appointment))->toSms($this->customer));
     }
 
     /**
@@ -125,7 +125,12 @@ class AppointmentNotificationsTest extends TestCase
         $this->assertSame($subject, $sent[0]->getSubject());
         $this->assertSame($this->customer->email, $sent[0]->getTo()[0]->getAddress());
 
-        $this->assertSame([['to' => '+15551234567', 'message' => $sms]], $this->sms->sent);
+        $this->assertSame([['to' => '+15551234567', 'message' => $this->withCancelUrl($sms)]], $this->sms->sent);
+    }
+
+    private function withCancelUrl(string $sms): string
+    {
+        return str_replace('{cancel_url}', url('/cancel/the-cancel-token'), $sms);
     }
 
     /**
@@ -157,6 +162,18 @@ class AppointmentNotificationsTest extends TestCase
         $this->customer->notifyNow($notification);
         $this->assertCount(1, $this->sentEmails());
         $this->assertSame([], $this->sms->sent);
+    }
+
+    public function test_passwordless_customers_without_an_email_only_get_sms(): void
+    {
+        $this->customer->update(['email' => null]);
+        $notification = new AppointmentConfirmed($this->appointment);
+
+        $this->assertSame([SmsChannel::class], $notification->via($this->customer));
+
+        $this->customer->notifyNow($notification);
+        $this->assertCount(0, $this->sentEmails());
+        $this->assertCount(1, $this->sms->sent);
     }
 
     public function test_customers_with_a_phone_are_routed_to_both_channels(): void

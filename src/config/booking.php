@@ -12,4 +12,10 @@ return [
     // Reminders go out this many hours before an appointment. Bookings made inside
     // this window are marked as reminded, since the confirmation already covers it.
     'reminder_lead_hours' => (int) env('BOOKING_REMINDER_LEAD_HOURS', 24),
+
+    // SMS codes that confirm a guest booking.
+    'otp' => [
+        'ttl_minutes' => (int) env('BOOKING_OTP_TTL_MINUTES', 10),
+        'max_attempts' => (int) env('BOOKING_OTP_MAX_ATTEMPTS', 5),
+    ],
 ];

@@ -20,7 +20,7 @@ class StoreBookingRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return true; // Any authenticated user may book; auth:sanctum guards the route.
+        return true; // Guarded by auth:sanctum or, for guests, by the SMS code.
     }
 
     public function rules(): array

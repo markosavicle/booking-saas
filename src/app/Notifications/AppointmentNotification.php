@@ -12,7 +12,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 
 /**
- * Customer-facing appointment notification: always e-mail, plus SMS when the customer has a phone.
+ * Customer-facing appointment notification, by e-mail and/or SMS depending on what the customer gave us.
  */
 abstract class AppointmentNotification extends Notification implements ShouldQueue, SmsNotification
 {
@@ -39,9 +39,10 @@ abstract class AppointmentNotification extends Notification implements ShouldQue
      */
     public function via(object $notifiable): array
     {
-        return filled($notifiable->routeNotificationFor('sms', $this))
-            ? ['mail', SmsChannel::class]
-            : ['mail'];
+        return array_values(array_filter([
+            filled($notifiable->routeNotificationFor('mail', $this)) ? 'mail' : null,
+            filled($notifiable->routeNotificationFor('sms', $this)) ? SmsChannel::class : null,
+        ]));
     }
 
     protected function details(): AppointmentDetails
