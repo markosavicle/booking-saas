@@ -41,7 +41,9 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            // Host-relative, so uploads follow whatever URL the visitor used (tunnel, quick tunnel,
+            // localhost) instead of a possibly stale APP_URL. Only ever used in <img> tags on our pages.
+            'url' => '/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

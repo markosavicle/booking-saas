@@ -221,4 +221,18 @@ class BookingPageTest extends BookingTestCase
             ->assertSee('Rival Barber')
             ->assertSee('Rival fade');
     }
+
+    public function test_uploaded_images_follow_the_visitors_host_not_app_url(): void
+    {
+        config(['app.url' => 'https://stale-tunnel.trycloudflare.com']);
+        $image = GalleryImage::factory()->for($this->tenant)->create(['path' => 'tenants/gallery/fade.jpg']);
+        $this->tenant->update(['hero_image_path' => 'tenants/heroes/front.jpg']);
+
+        $this->get("/book/{$this->tenant->slug}")
+            ->assertOk()
+            ->assertSee('src="/storage/tenants/gallery/fade.jpg"', false)
+            ->assertSee('href="/storage/tenants/heroes/front.jpg"', false)
+            ->assertDontSee('stale-tunnel');
+        $this->assertSame('/storage/tenants/gallery/fade.jpg', $image->url());
+    }
 }

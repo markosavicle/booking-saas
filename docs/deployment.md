@@ -107,7 +107,22 @@ curl -sI https://booking.example.com/book | head -1   # HTTP/2 200
   - No SMS is ever sent, even if Twilio is configured: visitors type in made-up numbers that may belong to real people.
   - Every public page and the admin panel carry an amber "Demo" banner explaining that on a live site the code arrives by text message.
   - Expiry, attempt limits and rate limits work exactly as they do live.
-- **E-mail:** prod Mailpit keeps confirmations on the server, which is fine for a demo. For real delivery, set the `MAIL_*` variables to an SMTP provider's free tier.
+- **E-mail:** `MAIL_MAILER=log` (the default in `src/.env.example`) only writes mail to `storage/logs/laravel.log`. Two options:
+  - **Real delivery for free, through Gmail:** turn on 2-step verification, then create an app password at myaccount.google.com/apppasswords. Set these in `src/.env`:
+    ```dotenv
+    MAIL_MAILER=smtp
+    MAIL_SCHEME=null
+    MAIL_HOST=smtp.gmail.com
+    MAIL_PORT=587
+    MAIL_USERNAME=you@gmail.com
+    MAIL_PASSWORD=<16-character app password, no spaces>
+    MAIL_FROM_ADDRESS=you@gmail.com
+    MAIL_FROM_NAME="Booking demo"
+    ```
+    Run `php artisan optimize && php artisan queue:restart` afterwards. Gmail allows about 500 messages a day.
+
+    In demo mode, anyone can make your account send a booking e-mail to any address. The booking rate limits cap how often, but consider a dedicated Gmail account for the demo.
+  - **Keep mail on the server:** set `MAIL_MAILER=smtp`, `MAIL_HOST=mailpit` and `MAIL_PORT=1025`, and read the messages in Mailpit on `MAILPIT_PORT`. Nothing reaches real inboxes.
 - **Cloudflare settings:**
   - Turn on SSL/TLS → **Always Use HTTPS**.
   - Optionally add a free WAF rate-limiting rule for `/api/*` as an extra layer.
