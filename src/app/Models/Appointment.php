@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class Appointment extends Model
 {
@@ -28,6 +29,18 @@ class Appointment extends Model
         'reminder_sent_at',
     ];
 
+    /** Bearer secret for the public cancel link; never serialised. */
+    protected $hidden = [
+        'cancel_token',
+    ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Appointment $appointment): void {
+            $appointment->cancel_token ??= Str::random(48);
+        });
+    }
+
     protected function casts(): array
     {
         return [
@@ -36,6 +49,11 @@ class Appointment extends Model
             'reminder_sent_at' => 'datetime',
             'status' => AppointmentStatus::class,
         ];
+    }
+
+    public function cancelUrl(): string
+    {
+        return route('booking.cancel', $this->cancel_token);
     }
 
     public function user(): BelongsTo

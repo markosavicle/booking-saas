@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\BookingPageController;
+use App\Http\Controllers\CancelBookingPageController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -10,11 +10,8 @@ Route::get('/', function () {
 
 Route::get('/book/{tenant:slug?}', BookingPageController::class)->name('booking');
 
-// JSON session endpoints for the booking widget (Sanctum SPA cookie auth).
-Route::prefix('auth')->group(function () {
-    Route::middleware('throttle:10,1')->group(function () {
-        Route::post('/register', [SessionController::class, 'register']);
-        Route::post('/login', [SessionController::class, 'login']);
-    });
-    Route::post('/logout', [SessionController::class, 'logout'])->middleware('auth');
+// Public cancel link: the unguessable token is the credential.
+Route::middleware('throttle:booking-cancel')->group(function () {
+    Route::get('/cancel/{appointment:cancel_token}', [CancelBookingPageController::class, 'show'])->name('booking.cancel');
+    Route::post('/cancel/{appointment:cancel_token}', [CancelBookingPageController::class, 'destroy']);
 });

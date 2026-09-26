@@ -50,8 +50,6 @@ class TenantApiTest extends BookingTestCase
 
     public function test_the_booking_page_renders_and_deep_links_to_a_shop(): void
     {
-        $this->withoutVite();
-
         $this->get('/book')->assertOk()->assertSee('bookingWidget(null)', false);
         $this->get("/book/{$this->tenant->slug}")->assertOk()->assertSee("bookingWidget('{$this->tenant->slug}')", false);
         $this->get('/book/unknown-shop')->assertNotFound();

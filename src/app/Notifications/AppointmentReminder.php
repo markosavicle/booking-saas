@@ -31,13 +31,14 @@ final class AppointmentReminder extends AppointmentNotification
             ->line("Service: {$details->serviceName}")
             ->lineIf($details->staffName !== null, "With: {$details->staffName}")
             ->line("When: {$details->when}")
-            ->line('If you can no longer make it, please cancel so someone else can take the slot.');
+            ->line('If you can no longer make it, please cancel so someone else can take the slot.')
+            ->action('Cancel booking', $this->appointment->cancelUrl());
     }
 
     public function toSms(object $notifiable): string
     {
         $details = $this->details();
 
-        return "Reminder from {$details->businessName}: {$details->serviceName} on {$details->when}.";
+        return "Reminder from {$details->businessName}: {$details->serviceName} on {$details->when}. Can't make it? {$this->appointment->cancelUrl()}";
     }
 }

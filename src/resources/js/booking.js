@@ -1,21 +1,28 @@
 /**
- * Booking widget state. Talks to the JSON API with the session cookie
- * (Sanctum SPA mode); every date/time the API sends or accepts is
- * wall-clock time in the selected shop's timezone.
+ * Guest booking wizard: shop & service → date & time → details → SMS code.
+ * No account or cookie: the booking is created only when the SMS code is confirmed.
+ * Every date/time the API sends or accepts is wall-clock time at the selected shop.
  */
 
 const DAYS_SHOWN = 14;
+const RESEND_COOLDOWN_SECONDS = 60;
 
-function xsrfToken() {
-    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-
-    return match ? decodeURIComponent(match[1]) : '';
-}
+export const STEPS = [
+    { key: 'service', label: 'Service' },
+    { key: 'time', label: 'Time' },
+    { key: 'details', label: 'Details' },
+    { key: 'verify', label: 'Verify' },
+];
 
 class ApiError extends Error {
-    constructor(status, body) {
-        super(body?.message || `Request failed (${status})`);
-        this.status = status;
+    constructor(response, body) {
+        const retryAfter = Number(response.headers.get('Retry-After')) || null;
+        const message = response.status === 429
+            ? `Too many attempts. Please try again in ${retryAfter ?? 60} seconds.`
+            : body?.message || `Something went wrong (${response.status}). Please try again.`;
+
+        super(message);
+        this.status = response.status;
         this.errors = body?.errors || {};
     }
 }
@@ -23,24 +30,17 @@ class ApiError extends Error {
 async function api(method, url, body) {
     const response = await fetch(url, {
         method,
-        credentials: 'same-origin',
         headers: {
             Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-XSRF-TOKEN': xsrfToken(),
             ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
     });
 
-    if (response.status === 204) {
-        return null;
-    }
-
     const json = await response.json().catch(() => null);
 
     if (!response.ok) {
-        throw new ApiError(response.status, json);
+        throw new ApiError(response, json);
     }
 
     return json;
@@ -80,33 +80,41 @@ function describeDate(isoDate) {
 
 export default function bookingWidget(initialSlug = null) {
     return {
-        step: 'shop', // shop → service → time → confirm → done
+        steps: STEPS,
+        step: 'service', // service → time → details → verify → done
         loading: false,
         error: null,
+        notice: null,
 
         tenants: [],
         tenant: null,
         service: null,
-        staffId: '',
+        staffId: null,
         date: null,
         slots: [],
         slotsLoading: false,
         slot: null,
 
-        user: null,
-        authMode: 'login',
-        form: { name: '', email: '', phone: '', password: '', password_confirmation: '' },
+        form: { name: '', phone: '', email: '' },
         fieldErrors: {},
+
+        verification: null, // { id, phone, expires_in }
+        code: '',
+        resendIn: 0,
+        resendTimer: null,
+
         booking: null,
+        cancelUrl: null,
 
         async init() {
-            this.loadUser();
             await this.run(async () => {
                 this.tenants = (await api('GET', '/api/tenants')).data;
             });
 
             if (initialSlug) {
                 await this.selectTenant(initialSlug);
+            } else if (this.tenants.length === 1) {
+                await this.selectTenant(this.tenants[0].slug);
             }
         },
 
@@ -124,31 +132,38 @@ export default function bookingWidget(initialSlug = null) {
             }
         },
 
-        async loadUser() {
-            try {
-                this.user = (await api('GET', '/api/user')).data;
-            } catch {
-                this.user = null;
-            }
+        get stepIndex() {
+            return this.steps.findIndex((step) => step.key === this.step);
         },
 
-        // Step 1: shop
+        go(step) {
+            this.error = null;
+            this.notice = null;
+            this.step = step;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+
+        // Step 1: shop and service
         async selectTenant(slug) {
             await this.run(async () => {
                 this.tenant = (await api('GET', `/api/tenants/${encodeURIComponent(slug)}`)).data;
                 this.service = null;
-                this.step = 'service';
             });
         },
 
-        // Step 2: service and (optional) staff member
+        changeTenant() {
+            this.tenant = null;
+            this.service = null;
+        },
+
         selectService(service) {
             this.service = service;
-            this.staffId = '';
-            this.step = 'time';
+            this.staffId = null;
+            this.go('time');
             this.selectDate(this.days.find((day) => day.open)?.iso ?? this.days[0].iso);
         },
 
+        // Step 2: barber, date and time
         get staffForService() {
             if (!this.service) {
                 return [];
@@ -157,7 +172,12 @@ export default function bookingWidget(initialSlug = null) {
             return this.tenant.staff_members.filter((member) => this.service.staff_member_ids.includes(member.id));
         },
 
-        // Step 3: date strip and slot grid
+        selectStaff(id) {
+            this.staffId = id;
+            this.slot = null;
+            this.loadSlots();
+        },
+
         get days() {
             if (!this.tenant) {
                 return [];
@@ -201,7 +221,6 @@ export default function bookingWidget(initialSlug = null) {
             }
 
             this.slotsLoading = true;
-            this.error = null;
 
             try {
                 const url = `/api/tenants/${this.tenant.slug}/services/${this.service.id}/availability?${params}`;
@@ -215,66 +234,124 @@ export default function bookingWidget(initialSlug = null) {
 
         selectSlot(slot) {
             this.slot = slot;
-            this.step = 'confirm';
+            this.go('details');
         },
 
-        // Step 4: authenticate and book
-        async authenticate() {
+        /** The chosen time is gone: back to a fresh slot grid, keeping the reason on screen. */
+        async slotTaken(message) {
+            this.go('time');
+            this.notice = message;
+            this.slot = null;
+            await this.loadSlots();
+        },
+
+        // Step 3: details → SMS code
+        async requestCode() {
             this.fieldErrors = {};
 
             await this.run(async () => {
                 try {
-                    const payload = this.authMode === 'login'
-                        ? { email: this.form.email, password: this.form.password }
-                        : { ...this.form, phone: this.form.phone || null };
-
-                    this.user = (await api('POST', `/auth/${this.authMode}`, payload)).data;
-                    this.form.password = this.form.password_confirmation = '';
+                    this.verification = (await api('POST', '/api/booking-requests', {
+                        service_id: this.service.id,
+                        staff_member_id: this.staffId,
+                        start_time: this.slot.start_time,
+                        name: this.form.name,
+                        phone: this.form.phone,
+                        email: this.form.email || null,
+                    })).data;
+                    this.form.phone = this.verification.phone;
+                    this.code = '';
+                    this.startResendCooldown();
+                    this.go('verify');
+                    this.$nextTick(() => this.$refs.code?.focus());
                 } catch (error) {
-                    this.fieldErrors = error.errors ?? {};
+                    if (error.status === 409) {
+                        await this.slotTaken(error.message);
+
+                        return;
+                    }
+
+                    if (error.status === 422 && error.errors.start_time) {
+                        await this.slotTaken(error.errors.start_time[0]);
+
+                        return;
+                    }
+
+                    this.fieldErrors = error.errors;
                     throw error;
                 }
             });
         },
 
-        async logout() {
-            await this.run(async () => {
-                await api('POST', '/auth/logout');
-                this.user = null;
-            });
+        startResendCooldown() {
+            clearInterval(this.resendTimer);
+            this.resendIn = RESEND_COOLDOWN_SECONDS;
+            this.resendTimer = setInterval(() => {
+                this.resendIn = Math.max(0, this.resendIn - 1);
+
+                if (this.resendIn === 0) {
+                    clearInterval(this.resendTimer);
+                }
+            }, 1000);
         },
 
-        async confirmBooking() {
+        // Step 4: confirm the code; this is what creates the booking
+        onCodeInput() {
+            this.code = this.code.replace(/\D/g, '').slice(0, 6);
+
+            if (this.code.length === 6 && !this.loading) {
+                this.confirmCode();
+            }
+        },
+
+        async confirmCode() {
+            if (this.code.length !== 6) {
+                this.error = 'Enter the 6-digit code from the SMS.';
+
+                return;
+            }
+
             await this.run(async () => {
                 try {
-                    this.booking = (await api('POST', '/api/bookings', {
-                        service_id: this.service.id,
-                        staff_member_id: this.staffId ? Number(this.staffId) : null,
-                        start_time: this.slot.start_time,
-                    })).data;
-                    this.step = 'done';
+                    const response = await api('POST', `/api/booking-requests/${this.verification.id}/confirm`, { code: this.code });
+                    this.booking = response.data;
+                    this.cancelUrl = response.meta.cancel_url;
+                    clearInterval(this.resendTimer);
+                    this.go('done');
                 } catch (error) {
-                    if (error.status === 401) {
-                        this.user = null;
-                    } else if (error.status === 409 || error.status === 422) {
-                        // Someone else took the slot meanwhile: show fresh availability.
-                        this.step = 'time';
-                        await this.loadSlots();
+                    this.code = '';
+
+                    if (error.status === 409) {
+                        await this.slotTaken(error.message);
+
+                        return;
                     }
 
-                    throw error;
+                    throw error.errors.code ? new Error(error.errors.code[0]) : error;
                 }
             });
         },
 
         // Navigation and formatting helpers
         back() {
-            this.error = null;
-            this.step = { service: 'shop', time: 'service', confirm: 'time' }[this.step] ?? 'shop';
+            const previous = { time: 'service', details: 'time', verify: 'details' }[this.step];
+
+            if (previous) {
+                this.go(previous);
+            }
         },
 
         restart() {
-            Object.assign(this, { step: 'shop', tenant: null, service: null, slot: null, booking: null, error: null });
+            clearInterval(this.resendTimer);
+            Object.assign(this, {
+                service: null,
+                slot: null,
+                booking: null,
+                cancelUrl: null,
+                verification: null,
+                code: '',
+            });
+            this.go('service');
         },
 
         time(dateTime) {
@@ -287,6 +364,16 @@ export default function bookingWidget(initialSlug = null) {
 
         staffName(id) {
             return this.tenant?.staff_members.find((member) => member.id === id)?.name;
+        },
+
+        initials(name) {
+            return name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+        },
+
+        price(value) {
+            const amount = Number(value);
+
+            return Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
         },
     };
 }
