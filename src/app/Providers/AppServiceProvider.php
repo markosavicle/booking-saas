@@ -22,7 +22,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(SmsSender::class, fn (Application $app): SmsSender => match (config('services.sms.driver')) {
+        // Demo mode never texts anyone: visitors type in made-up numbers that may belong to real people.
+        $this->app->singleton(SmsSender::class, fn (Application $app): SmsSender => match (config('booking.demo_mode') ? 'log' : config('services.sms.driver')) {
             'twilio' => new TwilioSmsSender(
                 $app->make(HttpClient::class),
                 (string) config('services.twilio.sid'),

@@ -10,6 +10,7 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -51,6 +52,11 @@ class AdminPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
+            // Inline styles: the panel's CSS is Filament's own build, not the app's Tailwind.
+            ->renderHook(PanelsRenderHook::BODY_START, fn (): string => config('booking.demo_mode')
+                ? '<div role="note" style="background:#fbbf24;color:#09090a;text-align:center;font-size:.8rem;font-weight:600;padding:.4rem 1rem">'
+                    .'DEMO MODE: sample data for a portfolio demo. Booking SMS codes are shown on screen instead of being sent.</div>'
+                : '')
             ->authMiddleware([
                 Authenticate::class,
             ]);

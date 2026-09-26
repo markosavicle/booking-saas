@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Contracts\SmsSender;
 use App\Data\BookingDraft;
+use App\Data\IssuedOtp;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -24,9 +25,9 @@ final readonly class BookingOtpBroker
     ) {}
 
     /**
-     * Stores the draft, texts the code to the draft's phone and returns the verification id.
+     * Stores the draft and texts the code to the draft's phone.
      */
-    public function issue(BookingDraft $draft, string $businessName): string
+    public function issue(BookingDraft $draft, string $businessName): IssuedOtp
     {
         $id = (string) Str::uuid();
         $code = str_pad((string) random_int(0, 999_999), 6, '0', STR_PAD_LEFT);
@@ -45,7 +46,7 @@ final readonly class BookingOtpBroker
             "{$code} is your {$businessName} booking code. It expires in {$this->ttlMinutes()} minutes. Do not share it.",
         );
 
-        return $id;
+        return new IssuedOtp($id, $code);
     }
 
     /**

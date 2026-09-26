@@ -21,9 +21,10 @@
     $phone = $tenant?->phone;
     $socials = array_filter(['Instagram' => $tenant?->social_instagram, 'Facebook' => $tenant?->social_facebook]);
     $heroImage = $tenant?->heroImageUrl() ?? asset(\App\Models\Tenant::DEFAULT_HERO_IMAGE);
+    $demo = (bool) config('booking.demo_mode');
 @endphp
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full scroll-smooth scroll-pt-20 bg-ink-950">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @class(['h-full scroll-smooth bg-ink-950', 'scroll-pt-20' => ! $demo, 'scroll-pt-28' => $demo])>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -39,6 +40,9 @@
 
 {{-- Navigation --}}
 <header class="fixed inset-x-0 top-0 z-40 border-b border-white/5 bg-ink-950/70 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+    @if ($demo)
+        @include('partials.demo-banner')
+    @endif
     <nav class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6" aria-label="Main">
         <a href="#top" class="flex min-w-0 items-center gap-3">
             <span class="flex size-9 shrink-0 items-center justify-center rounded-full border border-gold-500/50 font-display text-sm font-semibold text-gold-300">
@@ -65,7 +69,7 @@
 
 <main id="top">
     {{-- Hero --}}
-    <section class="relative isolate flex min-h-[88svh] items-end overflow-hidden pt-16 sm:items-center">
+    <section @class(['relative isolate flex min-h-[88svh] items-end overflow-hidden sm:items-center', 'pt-16' => ! $demo, 'pt-24' => $demo])>
         <img
             src="{{ $heroImage }}"
             alt=""
@@ -476,8 +480,20 @@
                         <span class="mx-auto flex size-14 items-center justify-center rounded-full border border-gold-500/50 text-gold-300">
                             <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3"/></svg>
                         </span>
-                        <p class="mt-5 text-sm text-ink-400">We sent a 6-digit code to</p>
+                        <p class="mt-5 text-sm text-ink-400" x-text="verification?.demo_code ? 'On a live site we would text a 6-digit code to' : 'We sent a 6-digit code to'"></p>
                         <p class="mt-1 font-medium tabular-nums text-white" x-text="verification?.phone"></p>
+
+                        {{-- Demo mode only: the API returns the code because no SMS is sent. --}}
+                        <template x-if="verification?.demo_code">
+                            <div class="mt-6 rounded-xl border border-dashed border-amber-400/70 bg-amber-400/10 px-4 py-4 text-left" data-demo-code>
+                                <p class="text-[0.65rem] font-bold tracking-[0.2em] text-amber-300 uppercase">Demo mode · no SMS sent</p>
+                                <div class="mt-2 flex items-center justify-between gap-3">
+                                    <span class="font-display text-3xl font-semibold tracking-[0.25em] text-white tabular-nums" x-text="verification.demo_code"></span>
+                                    <button type="button" class="tap rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-ink-950 hover:bg-amber-300" @click="code = verification.demo_code; onCodeInput()">Use this code</button>
+                                </div>
+                                <p class="mt-2 text-xs leading-relaxed text-ink-400">This is the code a customer would receive by text message. Everything else, including expiry and attempt limits, works as it does live.</p>
+                            </div>
+                        </template>
 
                         <form class="mt-7" @submit.prevent="confirmCode()">
                             <label for="code" class="sr-only">Verification code</label>
@@ -521,7 +537,11 @@
                                         <svg class="size-7" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l3.3 3.29 7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>
                                     </span>
                                     <p class="mt-4 font-display text-2xl font-semibold text-white" x-text="booking.tenant.name"></p>
-                                    <p class="mt-1 text-sm text-ink-400">We've texted your confirmation<span x-show="form.email"> and emailed it</span>.</p>
+                                    @if ($demo)
+                                        <p class="mt-1 text-sm text-amber-300">Demo mode: nothing was texted. On a live site the customer gets this confirmation by SMS<span x-show="form.email"> and e-mail</span>, with a private cancel link.</p>
+                                    @else
+                                        <p class="mt-1 text-sm text-ink-400">We've texted your confirmation<span x-show="form.email"> and emailed it</span>.</p>
+                                    @endif
                                 </div>
                                 <dl class="divide-y divide-ink-700 text-sm">
                                     <div class="flex justify-between gap-4 px-5 py-3.5">
@@ -546,7 +566,7 @@
                             <button type="button" class="btn-gold tap mt-6 w-full" @click="restart()">Done</button>
                             {{-- Deliberately low-key: a fresh booking shouldn't sit one tap away from being canceled. --}}
                             <p class="mt-4 text-center text-xs text-ink-400">
-                                Plans changed? Use the link in your SMS, or
+                                {{ $demo ? 'Plans changed? Live customers get a cancel link by SMS. Here you can' : 'Plans changed? Use the link in your SMS, or' }}
                                 <a class="underline decoration-ink-600 underline-offset-2 transition hover:text-gold-300 hover:decoration-gold-400" :href="cancelUrl">cancel this booking</a>.
                             </p>
                         </div>

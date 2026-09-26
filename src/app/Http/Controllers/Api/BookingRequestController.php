@@ -20,12 +20,14 @@ class BookingRequestController extends Controller
     public function store(RequestBookingOtpRequest $request, RequestBookingOtpAction $requestOtp): JsonResponse
     {
         $draft = $request->draft();
-        $id = $requestOtp->execute($draft, $request->service(), $request->staffMember());
+        $otp = $requestOtp->execute($draft, $request->service(), $request->staffMember());
 
         return response()->json(['data' => [
-            'id' => $id,
+            'id' => $otp->id,
             'phone' => $draft->phone,
             'expires_in' => (int) config('booking.otp.ttl_minutes') * 60,
+            // Demo sites show the code on screen, since visitors can't receive the SMS.
+            ...(config('booking.demo_mode') ? ['demo_code' => $otp->code] : []),
         ]], 202);
     }
 
