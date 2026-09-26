@@ -95,6 +95,8 @@ Single database, shared schema, with a `tenant_id` on every tenant-owned table.
 | `redis` | Cache, queues and rate limits |
 | `mailpit` | Local e-mail inbox, persisted in a named volume |
 | `node` | Frontend tooling on demand (`tools` profile), runs as the host user |
+| `adminer` | Database browser on demand (`debug` profile), bound to `127.0.0.1` only |
+| `cloudflared` | Cloudflare Tunnel for a public URL (`tunnel` profile, prod only; see [docs/deployment.md](docs/deployment.md)) |
 
 `CONTAINER_PREFIX` and the port variables in the root `.env` let dev and prod stacks run side by side on one host.
 
@@ -106,6 +108,7 @@ Nginx Proxy Manager terminates TLS and reaches the stack over the shared externa
 - **Spoofing protection:**
   - The app's nginx passes those headers to PHP only for requests coming from the proxy's network (`docker/nginx/default.conf`). Anyone hitting the published port directly can't fake an IP to get around the rate limits.
   - The client IP is taken from `X-Real-IP`, because the proxy appends to a client-supplied `X-Forwarded-For`.
+- **Cloudflare Tunnel:** nginx also listens on port 8080, which isn't published on the host. There the client IP comes from `CF-Connecting-IP`, which Cloudflare's edge overwrites, so per-IP rate limits stay per visitor. The shared PHP settings live in `docker/nginx/laravel.inc`. See [docs/deployment.md](docs/deployment.md) for free public hosting.
 - **Upload limits:** raised consistently in nginx (`client_max_body_size`) and PHP (`docker/php/uploads.ini`).
 
 ### File permissions
@@ -191,6 +194,23 @@ The seeder creates three shops, each with staff, services, business hours and a 
 | `belgrade@example.com`, `novi-sad@example.com`, `nis@example.com` | `password` | Shop admins |
 
 With `SMS_DRIVER=log`, OTP codes and reminders are written to `src/storage/logs/laravel.log` instead of being sent.
+
+The seeder also runs `DemoContentSeeder`: a distinct hero, a captioned gallery and an FAQ for each demo shop. It only fills what a shop is missing, so it is safe to re-run on a database you care about:
+
+```bash
+docker compose exec app php artisan db:seed --class=DemoContentSeeder
+```
+
+Photos are from Unsplash (Unsplash License) and live in `database/seeders/images`.
+
+### Inspecting the database
+
+```bash
+docker compose --profile debug up -d adminer   # http://127.0.0.1:8082, server "mysql", DB_* from src/.env
+docker compose --profile debug stop adminer    # when done
+```
+
+Adminer is bound to the host's loopback, so from another machine you reach it through SSH: `ssh -L 8082:127.0.0.1:8082 you@server`. For one-off queries, `docker compose exec app php artisan tinker` or `docker compose exec mysql mysql -u <DB_USERNAME> -p <DB_DATABASE>` work without any extra service.
 
 > ⚠️ `migrate --seed` and `migrate:fresh` are for a fresh database only. Never run them against a database whose data you want to keep.
 
