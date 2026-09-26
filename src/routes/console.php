@@ -9,4 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote')->hourly();
 
 Schedule::command('app:test-schedule')->everyMinute();
-Schedule::command('appointments:send-reminders')->everyMinute();
+Schedule::command('appointments:send-reminders')->everyFiveMinutes()->withoutOverlapping()->onOneServer();

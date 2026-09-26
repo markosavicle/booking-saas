@@ -54,6 +54,7 @@ class DatabaseSeeder extends Seeder
         foreach (self::TENANTS as $data) {
             $tenant = Tenant::factory()->withStandardHours('09:00', '21:00')->create([
                 'name' => $data['name'],
+                'timezone' => 'Europe/Belgrade',
             ]);
 
             User::factory()->tenantAdmin($tenant)->create([
@@ -79,7 +80,8 @@ class DatabaseSeeder extends Seeder
 
             // Pre-booked slots on the next working day to exercise availability.
             foreach ([['10:00', $services[0], $staff[0]], ['14:00', $services[1], $staff[1]]] as [$time, $service, $member]) {
-                $start = $bookingDay->setTimeFromTimeString($time);
+                // Wall-clock time at the shop, stored as UTC.
+                $start = $bookingDay->shiftTimezone($tenant->timezone)->setTimeFromTimeString($time)->utc();
 
                 Appointment::factory()->forService($service)->create([
                     'staff_member_id' => $member->id,

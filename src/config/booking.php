@@ -8,4 +8,8 @@ return [
 
     // How far ahead customers may book.
     'max_advance_days' => (int) env('BOOKING_MAX_ADVANCE_DAYS', 60),
+
+    // Reminders go out this many hours before an appointment. Bookings made inside
+    // this window are marked as reminded, since the confirmation already covers it.
+    'reminder_lead_hours' => (int) env('BOOKING_REMINDER_LEAD_HOURS', 24),
 ];

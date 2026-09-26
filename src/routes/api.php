@@ -3,12 +3,13 @@
 use App\Http\Controllers\Api\AvailabilityController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\TenantController;
+use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+Route::get('/user', fn (Request $request) => new UserResource($request->user()))->middleware('auth:sanctum');
+
+Route::get('/tenants', [TenantController::class, 'index']);
 
 // Public: tenant landing data and availability, addressed by slug.
 Route::scopeBindings()->prefix('tenants/{tenant:slug}')->group(function () {

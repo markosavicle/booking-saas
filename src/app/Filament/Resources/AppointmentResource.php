@@ -33,8 +33,10 @@ class AppointmentResource extends Resource
                     ->relationship('user', 'name')
                     ->required(),
                 Forms\Components\DateTimePicker::make('start_time')
+                    ->timezone(fn (?Appointment $record): string => static::shopTimezone($record))
                     ->required(),
                 Forms\Components\DateTimePicker::make('end_time')
+                    ->timezone(fn (?Appointment $record): string => static::shopTimezone($record))
                     ->required(),
                 Forms\Components\Select::make('status')
                     ->options(AppointmentStatus::class)
@@ -60,9 +62,11 @@ class AppointmentResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('start_time')
                     ->dateTime()
+                    ->timezone(fn (Appointment $record): string => static::shopTimezone($record))
                     ->sortable(),
                 Tables\Columns\TextColumn::make('end_time')
                     ->dateTime()
+                    ->timezone(fn (Appointment $record): string => static::shopTimezone($record))
                     ->sortable(),
                 Tables\Columns\TextColumn::make('status')->badge(),
                 Tables\Columns\TextColumn::make('created_at')
@@ -101,5 +105,15 @@ class AppointmentResource extends Resource
             'create' => Pages\CreateAppointment::route('/create'),
             'edit' => Pages\EditAppointment::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * Appointments are stored in UTC but edited and shown in the shop's wall-clock time.
+     */
+    private static function shopTimezone(?Appointment $record): string
+    {
+        return $record?->tenant?->timezone
+            ?? auth()->user()?->tenant?->timezone
+            ?? config('app.timezone');
     }
 }

@@ -7,6 +7,7 @@ namespace App\Actions\Booking;
 use App\Enums\AppointmentStatus;
 use App\Exceptions\BookingConflictException;
 use App\Models\Appointment;
+use App\Notifications\AppointmentCanceled;
 
 final readonly class CancelBookingAction
 {
@@ -24,6 +25,8 @@ final readonly class CancelBookingAction
         }
 
         $appointment->update(['status' => AppointmentStatus::Canceled]);
+
+        $appointment->user->notify(new AppointmentCanceled($appointment));
 
         return $appointment;
     }

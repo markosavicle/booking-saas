@@ -26,6 +26,19 @@ jobs:
           extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite3, pdo_sqlite, predis
           coverage: none
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+
+      - name: Build Front-end Assets
+        run: |
+          cd src
+          npm ci --no-audit --no-fund
+          npm run build
+
       - name: Copy .env.example
         run: |
           cd src
