@@ -6,6 +6,8 @@ namespace Tests\Feature;
 
 use App\Models\StaffMember;
 use App\Models\Tenant;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\Feature\Api\BookingTestCase;
 
@@ -77,8 +79,49 @@ class BookingPageTest extends BookingTestCase
             ->assertOk()
             ->assertSee(config('app.name'))
             ->assertSee('bookingWidget(null)', false)
-            ->assertDontSee('Opening hours')
-            ->assertDontSee('id="team"', false);
+            ->assertDontSee('Opening hours');
+    }
+
+    public function test_the_page_without_a_shop_features_barbers_from_across_the_platform(): void
+    {
+        $rival = Tenant::factory()->create(['name' => 'Novi Sad Fade Studio']);
+        StaffMember::factory()->for($rival)->create(['name' => 'Marko']);
+        StaffMember::factory()->for($rival)->inactive()->create(['name' => 'Retired Rick']);
+
+        $this->get('/book')
+            ->assertOk()
+            ->assertSee('id="team"', false)
+            ->assertSee('Meet the barbers')
+            ->assertSeeInOrder(['Marko', 'Barber', 'Novi Sad Fade Studio'])
+            ->assertSee('href="'.route('booking', $rival).'"', false)
+            ->assertSeeInOrder(['Anna', 'Barber', $this->tenant->name])
+            ->assertSee('href="'.route('booking', $this->tenant).'"', false)
+            ->assertDontSee('Retired Rick');
+    }
+
+    public function test_the_directory_is_capped_and_eager_loads_each_barbers_shop(): void
+    {
+        StaffMember::factory()->count(10)->create();
+        DB::enableQueryLog();
+
+        $response = $this->get('/book')->assertOk();
+
+        $this->assertSame(6, substr_count($response->getContent(), 'after:absolute'));
+        $staffQueries = collect(DB::getQueryLog())->pluck('query')
+            ->filter(fn (string $sql): bool => str_contains($sql, 'from "staff_members"') || str_contains($sql, 'from "tenants"'));
+        $this->assertCount(2, $staffQueries, 'Expected one staff query plus one eager-loaded tenants query.');
+    }
+
+    public function test_a_signed_in_shop_admin_still_sees_the_whole_platform_directory(): void
+    {
+        $rival = Tenant::factory()->create(['name' => 'Rival Shop']);
+        StaffMember::factory()->for($rival)->create(['name' => 'Marko']);
+
+        $this->actingAs(User::factory()->tenantAdmin($this->tenant)->create())
+            ->get('/book')
+            ->assertOk()
+            ->assertSee('Marko')
+            ->assertSee('Anna');
     }
 
     public function test_unknown_shops_return_404(): void

@@ -52,8 +52,10 @@ class TenantResource extends Resource
                             // Changing it breaks every link and QR code a shop has printed.
                             ->disabled(fn (): bool => ! static::currentUser()?->isSuperAdmin()),
                         Forms\Components\Select::make('timezone')
-                            ->options(fn (): array => array_combine(DateTimeZone::listIdentifiers(), DateTimeZone::listIdentifiers()))
+                            // Static options: a closure makes Filament re-fetch the list over Livewire on every open.
+                            ->options(self::timezoneOptions())
                             ->searchable()
+                            ->optionsLimit(count(DateTimeZone::listIdentifiers()))
                             ->required()
                             ->default('Europe/Belgrade'),
                         Forms\Components\Select::make('currency')
@@ -138,6 +140,16 @@ class TenantResource extends Resource
             'create' => Pages\CreateTenant::route('/create'),
             'edit' => Pages\EditTenant::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function timezoneOptions(): array
+    {
+        $identifiers = DateTimeZone::listIdentifiers();
+
+        return array_combine($identifiers, $identifiers);
     }
 
     private static function currentUser(): ?User
