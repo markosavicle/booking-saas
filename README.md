@@ -120,12 +120,12 @@ If your host UID/GID isn't 1000, set `HOST_UID`/`HOST_GID` in the root `.env` an
 
 - **`ci.yml`:** runs on every pull request to `main`, on a GitHub-hosted runner. It installs PHP 8.4 and Node 22, builds the frontend, and runs the full PHPUnit suite on in-memory SQLite with a Redis service container.
 - **`deploy.yml`:** runs on every push to `main`. It first reuses `ci.yml`. Only when the tests pass does a **self-hosted runner** deploy that exact commit to the production checkout:
-  1. Maintenance mode on.
+  1. Check that the checkout's `.env` pins `COMPOSE_PROJECT_NAME=booking-prod`, then turn maintenance mode on.
   2. `git reset --hard <sha>`.
-  3. `docker compose up -d --build`, then restart nginx so the bind-mounted config is reloaded.
+  3. Remove stopped containers that hold one of our container names under another compose project (a running one fails the deploy instead). Then `docker compose up -d --build --remove-orphans`, and restart nginx so the bind-mounted config is reloaded.
   4. Repair file ownership (`permissions` service), then `composer install --no-dev`.
   5. Build the frontend in the `node` service, as the runner user.
-  6. `storage:link`, `migrate --force`, `optimize`, `filament:optimize`, `queue:restart`.
+  6. `storage:link`, `migrate --force`, `optimize:clear`, `optimize`, `filament:optimize`, `queue:restart`.
   7. Maintenance mode off, even if a step fails.
 
   A concurrency group prevents two deploys from running at once.
@@ -144,10 +144,10 @@ The deploy workflow only ever touches the prod path. The dev checkout, its conta
 ```bash
 git clone https://github.com/markosavicle/booking-saas.git ~/docker/production-booking-saas
 cd ~/docker/production-booking-saas
-cp .env.example .env         # CONTAINER_PREFIX=booking-prod, WEB_PORT=8091, MAILPIT_PORT=8026, fresh DB passwords
+cp .env.example .env         # COMPOSE_PROJECT_NAME=booking-prod, CONTAINER_PREFIX=booking-prod, WEB_PORT=8091, MAILPIT_PORT=8026, fresh DB passwords
 cp src/.env.example src/.env # APP_ENV=production, APP_DEBUG=false, DB_HOST=mysql, matching DB creds
-COMPOSE_PROJECT_NAME=booking-prod docker compose up -d --build
-COMPOSE_PROJECT_NAME=booking-prod docker compose exec app sh -c 'composer install --no-dev -o && php artisan key:generate --force'
+docker compose up -d --build
+docker compose exec app sh -c 'composer install --no-dev -o && php artisan key:generate --force'
 ```
 
 Then re-run the "Deploy Booking SaaS" workflow (Actions → Run workflow) and point the reverse proxy at `booking-prod-web:80`.
